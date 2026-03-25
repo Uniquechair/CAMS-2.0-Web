@@ -12,8 +12,6 @@ import Status from '../../../../Component/Status/Status';
 import { FaEye} from 'react-icons/fa';
 import '../../../../Component/MainContent/MainContent.css';
 
-
-
 const PropertyListing = () => {
     const [searchKey, setSearchKey] = useState('');
     const [selectedStatus, setSelectedStatus] = useState('All');
@@ -31,17 +29,23 @@ const PropertyListing = () => {
     const { data, isLoading, error } = useQuery({
         queryKey: ['properties'],
         queryFn: () => fetchPropertiesListingTable(),
-        select: (data) => ({
-            properties: (data?.properties || []).filter(property => property.propertyid !== undefined),
-            totalCount: data?.totalCount || 0
-        }),
+        select: (data) => {
+            const validProps = (data?.properties || []).filter(property => property.propertyid !== undefined);
+            
+            // FIXED: Force exact sorting so Newest Properties ALWAYS show up on top instantly!
+            const sortedProps = validProps.sort((a, b) => parseInt(b.propertyid) - parseInt(a.propertyid));
+
+            return {
+                properties: sortedProps,
+                totalCount: data?.totalCount || 0
+            };
+        },
         staleTime: 30 * 60 * 1000,
         refetchInterval: 1000,  
     });
     
     // Extract properties from query result
     const properties = data?.properties || [];
-
 
     const displayToast = (type, message) => {
         setToastType(type);
@@ -50,26 +54,80 @@ const PropertyListing = () => {
         setTimeout(() => setShowToast(false), 5000);
     };
 
-   
-
     const handleAction = (action, property) => {
         if (action === 'view') {
+            
+            // FIXED: Added the beautiful UI decoder for Room Data!
+            let rawDesc = property.propertydescription || 'N/A';
+            let finalDesc = rawDesc;
+
+            if (rawDesc.includes("_ROOMDATA_")) {
+                const parts = rawDesc.split("_ROOMDATA_");
+                const cleanDesc = parts[0]; 
+                
+                try {
+                    const roomsList = JSON.parse(parts[1]);
+                    
+                    finalDesc = (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            <div style={{ fontSize: '15px', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap', marginBottom: '10px' }}>
+                                {cleanDesc}
+                            </div>
+                            
+                            <div style={{ fontWeight: 'bold', fontSize: '18px', borderBottom: '2px solid #eaeaea', paddingBottom: '8px', color: '#333' }}>
+                                Room Configurations
+                            </div>
+                            
+                            {roomsList.map((r, i) => (
+                                <div key={i} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '16px', backgroundColor: '#f9fcff' }}>
+                                    <div style={{ fontWeight: 'bold', color: '#0056b3', fontSize: '16px', marginBottom: '12px' }}>
+                                        {r.name}
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '14px', color: '#555' }}>
+                                        <div><strong>Bed:</strong> {r.bedType}</div>
+                                        <div><strong>Guests:</strong> Max {r.maxGuests}</div>
+                                        <div style={{ gridColumn: 'span 2' }}><strong>Base Price:</strong> RM {r.price}</div>
+                                    </div>
+
+                                    {r.options && r.options.length > 0 && (
+                                        <div style={{ marginTop: '12px', borderTop: '1px dashed #ccc', paddingTop: '12px' }}>
+                                            <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#333', marginBottom: '6px' }}>Variations:</div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '10px' }}>
+                                                {r.options.map((o, idx) => (
+                                                    <div key={idx} style={{ fontSize: '14px', color: '#555' }}>
+                                                        • {o.name}: <span style={{ fontWeight: 'bold', color: '#28a745' }}>RM {o.price}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    );
+                } catch(e) {
+                    console.error("Error parsing room data for view details", e);
+                    finalDesc = cleanDesc; 
+                }
+            }
+
             setSelectedProperty({
-                propertyaddress: property.propertyaddress || 'N/A',
-                normalrate: property.normalrate || 'N/A',
-                nearbylocation: property.nearbylocation || 'N/A',
+                propertyid: property.propertyid || 'N/A',
+                propertyname: property.propertyaddress || 'N/A', // Mapped to match displayLabels
+                clustername: property.clustername || 'N/A',
+                categoryname: property.categoryname || 'N/A',
+                propertyprice: property.normalrate || 'N/A',     // Mapped to match displayLabels
+                propertylocation: property.nearbylocation || 'N/A', // Mapped to match displayLabels
                 propertyguestpaxno: property.propertyguestpaxno || 'N/A',
                 propertystatus: property.propertystatus || 'N/A',
                 propertybedtype: property.propertybedtype || 'N/A',
-                propertydescription: property.propertydescription || 'N/A',
+                propertydescription: finalDesc,                  // Now passes beautiful HTML to the modal
                 images: property.propertyimage || [],
                 username: property.username || 'N/A',
             });
         }
     };
     
-
-
     const handleApplyFilters = () => {
         setAppliedFilters({ status: selectedStatus });
     };
@@ -110,7 +168,6 @@ const PropertyListing = () => {
             appliedFilters.status === 'All' ||
             (property.propertystatus ?? 'Pending').toLowerCase() === appliedFilters.status.toLowerCase();
 
-
         const searchInFields =
             `${property.propertyid} ${property.propertyaddress} ${property.clustername} ${property.normalrate} ${property.propertystatus}`
                 .toLowerCase()
@@ -118,7 +175,6 @@ const PropertyListing = () => {
 
         return statusMatch && searchInFields;
     });
-
 
 const columns = [
     { header: 'PID', accessor: 'propertyid' },
@@ -179,7 +235,6 @@ const columns = [
 
             <Filter filters={filters} onApplyFilters={handleApplyFilters} />
 
-
             {isLoading ? (
             <div className="loader-box">
                 <Loader />
@@ -208,9 +263,6 @@ const columns = [
                 labels={displayLabels}
                 onClose={() => setSelectedProperty(null)}
             />
-
-
-        
 
             {showToast && <Toast type={toastType} message={toastMessage} />}
         </div>

@@ -65,6 +65,7 @@ const Reservations = () => {
             try {
                 const reservationData = await fetchReservation();
                 if (Array.isArray(reservationData)) {
+                    // console.log('Reservations Data:', reservationData);
                     return reservationData.map(reservation => {
                         const reservationblocktime = new Date(reservation.reservationblocktime).getTime();
                         const currentDateTime = Date.now() + 8 * 60 * 60 * 1000;
@@ -103,6 +104,7 @@ const Reservations = () => {
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
     });
+    console.log('Operators Data:', operators);
 
     // Fetch clusters with React Query
     const { data: clusters = [] } = useQuery({
@@ -136,6 +138,8 @@ const Reservations = () => {
         },
         enabled: false, // Prevent automatic fetch
     });
+
+    // console.log('Administrator Properties:', administratorProperties);
     
     useEffect(() => {
         if (rejectedReservationID?.reservationid) {
@@ -187,6 +191,13 @@ const Reservations = () => {
         }
 
         const isOwner = Number(propertyOwnerID) === Number(currentUser.userid);
+        
+        // console.log('Ownership Check:', {
+        //     currentUserID: currentUser.userid,
+        //     propertyOwnerID,
+        //     userGroup: currentUser.userGroup,
+        //     isOwner
+        // });
         return isOwner;
     };
 
@@ -223,13 +234,13 @@ const Reservations = () => {
     };
 
     const formatDate = (datetime) => {
-        if (!datetime) return '';
-        const date = new Date(datetime);
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}-${month}-${year}`;
-    };
+    if (!datetime) return '';
+    const date = new Date(datetime);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+};
 
     const filteredReservations = Array.isArray(reservationsData)
         ? reservationsData.filter(
@@ -301,7 +312,6 @@ const Reservations = () => {
             }
 
             try {
-                displayToast('success', 'Processing Request...');
                 const newStatus = 'Accepted';
 
                 // First update the status
@@ -347,7 +357,7 @@ const Reservations = () => {
         setSelectedProperty(propertyid);
     };
 
-    const handleConfirmSuggestion = async () => {
+  const handleConfirmSuggestion = async () => {
         if (selectedProperty && rejectedReservationID.reservationid) {
             setIsProcessing(true); // <-- Start loading state
             try {
@@ -362,6 +372,7 @@ const Reservations = () => {
                 });
                 displayToast('success', 'New Room Suggestion Email Sent Successfully');
                 
+                // Force the window to stay open for 1.5 seconds to show "Suggesting..."
                 setTimeout(() => {
                     setMessageBoxMode(null);
                     setIsProcessing(false);
@@ -399,6 +410,7 @@ const Reservations = () => {
                 });
                 displayToast('success', 'Suggest Notification Sent Successfully');
                 
+                // Force the window to stay open for 1.5 seconds to show "Notifying..."
                 setTimeout(() => {
                     setMessageBoxMode(null);
                     setIsProcessing(false);
@@ -511,24 +523,6 @@ const Reservations = () => {
         return matchesSearch && matchesMinPrice && matchesMaxPrice;
     });
 
-    // Helper definition for operator search matching
-    const notifyFilteredOperators = operators.filter(operator => {
-        const searchTerm = suggestSearchKey.toLowerCase();
-        const matchesSearch = !searchTerm || 
-            operator.ufirstname?.toLowerCase().includes(searchTerm) ||
-            operator.ulastname?.toLowerCase().includes(searchTerm) ||
-            operator.username?.toLowerCase().includes(searchTerm) ||
-            operator.uemail?.toLowerCase().includes(searchTerm);
-        
-        const matchesUserGroup = selectedUserGroup === 'All' || 
-            operator.usergroup === selectedUserGroup;
-        
-        const matchesCluster = selectedCluster === 'All' || 
-            operator.clustername === selectedCluster;
-        
-        return matchesSearch && matchesUserGroup && matchesCluster;
-    });
-
     const renderAmenities = (property) => {
         const facilitiesString = property.facilities || '';
         const facilitiesList = facilitiesString.split(',').map(f => f.trim()).filter(f => f);
@@ -636,14 +630,13 @@ const Reservations = () => {
                         <button onClick={() => setShowMessageBox(false)} className="form-close-button">×</button>
 
                         <div className="message-box-buttons">
-                            <button onClick={() => handleMessageBoxSelect('suggest')}>Suggest Property</button>
-                            <button onClick={() => handleMessageBoxSelect('notify')}>Notify Operators</button>
+                            <button onClick={() => handleMessageBoxSelect('suggest')}>Suggest</button>
+                            <button onClick={() => handleMessageBoxSelect('notify')}>Notify Suggest</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* SUGGEST PROPERTY MODAL */}
             {messageBoxMode === 'suggest' && (
                 <div className="custom-message-box-overlay">
                     <div className="suggest-properties-modal">
@@ -718,6 +711,9 @@ const Reservations = () => {
                                                 alt={property.propertyaddress}
                                                 className="property-image-modern"
                                             />
+                                            {/* <div className="property-type-badge">
+                                                {property.propertyguestpaxno > 4 ? 'House' : 'Apartment'}
+                                            </div> */}
                                         </div>
                                         
                                         <div className="property-content">
@@ -772,178 +768,271 @@ const Reservations = () => {
                             <button 
                                 className="confirm-suggestion-btn" 
                                 onClick={handleConfirmSuggestion}
-                                disabled={isProcessing || !selectedProperty}
+                                disabled={isProcessing}
                             >
-                                {isProcessing ? '⏳ Suggesting Property...' : 'Confirm Suggestion'}
+                                {isProcessing ? '⏳ Suggesting Room...' : 'Confirm Suggestion'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* NOTIFY OPERATORS MODAL (Matches Suggest Property UI) */}
             {messageBoxMode === 'notify' && (
                 <div className="custom-message-box-overlay">
-                    <div className="suggest-properties-modal">
-                        <div className="suggest-header">
-                            <div className="suggest-title-section">
+                    <div className="operators-selection-modal">
+                        <div className="operators-modal-header">
+                            <div className="operators-title-section">
                                 <h2>Select Operators to Notify</h2>
-                                <p className="suggest-subtitle">Choose operators to notify about the rejected reservation</p>
+                                <p className="operators-subtitle">Choose operators to notify about the rejected reservation</p>
                             </div>
                             <button className="form-close-button" onClick={() => setMessageBoxMode('')}>
                                 <FaTimesCircle />
                             </button>
                         </div>
 
-                        <div className="suggest-filters">
-                            <div className="filter-header">
-                                <h3>Filter Operators</h3>
-                                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#007bff' }}>
-                                        👥 {selectedOperators.length} selected
-                                    </span>
-                                    <button className="clear-filters-btn" onClick={clearFilters}>
-                                        <FaTimesCircle /> Clear Filters
-                                    </button>
-                                </div>
+                        <div className="operators-selection-stats">
+                            <div className="selection-count">
+                                👥 {selectedOperators.length} selected
                             </div>
-                            
-                            <div className="filter-row">
-                                <div className="search-container" style={{ flex: 1 }}>
-                                    <label>Search Operators</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Search by name, username, or email..."
-                                        value={suggestSearchKey}
-                                        onChange={(e) => setSuggestSearchKey(e.target.value)}
-                                        className="suggest-search-input"
-                                    />
-                                </div>
-                            </div>
-                            
-                            <div className="filter-row">
-                                <div className="price-filter-group" style={{ width: '100%', display: 'flex', gap: '15px' }}>
-                                    <div className="price-input-container" style={{ flex: 1 }}>
-                                        <label>Role</label>
-                                        <select 
-                                            className="price-input"
-                                            value={selectedUserGroup}
-                                            onChange={(e) => setSelectedUserGroup(e.target.value)}
-                                        >
-                                            <option value="All">All Roles</option>
-                                            <option value="Administrator">Administrator</option>
-                                            <option value="Moderator">Moderator</option>
-                                        </select>
-                                    </div>
-                                    <div className="price-input-container" style={{ flex: 1 }}>
-                                        <label>Cluster</label>
-                                        <select 
-                                            className="price-input"
-                                            value={selectedCluster}
-                                            onChange={(e) => setSelectedCluster(e.target.value)}
-                                        >
-                                            <option value="All">All Clusters</option>
-                                            {[...new Set(operators.map(op => op.clustername).filter(Boolean))].map(clusterName => (
-                                                <option key={clusterName} value={clusterName}>{clusterName}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="filter-row" style={{ marginTop: '10px' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#555', padding: '10px', backgroundColor: '#f8fbfd', borderRadius: '6px', border: '1px solid #e1e8ed' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={notifyFilteredOperators.length > 0 && notifyFilteredOperators.every(op => selectedOperators.includes(op.userid))}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                const newSelections = [...new Set([...selectedOperators, ...notifyFilteredOperators.map(op => op.userid)])];
-                                                setSelectedOperators(newSelections);
-                                            } else {
-                                                const filteredIds = notifyFilteredOperators.map(op => op.userid);
-                                                setSelectedOperators(selectedOperators.filter(id => !filteredIds.includes(id)));
-                                            }
-                                        }}
-                                        style={{ width: '18px', height: '18px' }}
-                                    />
-                                    Select all {notifyFilteredOperators.length} filtered operators
-                                </label>
+                            <div className="total-count">
+                                📊 {(() => {
+                                    const filteredOperators = operators.filter(operator => {
+                                        const searchTerm = suggestSearchKey.toLowerCase();
+                                        const matchesSearch = !searchTerm || 
+                                            operator.ufirstname?.toLowerCase().includes(searchTerm) ||
+                                            operator.ulastname?.toLowerCase().includes(searchTerm) ||
+                                            operator.username?.toLowerCase().includes(searchTerm) ||
+                                            operator.uemail?.toLowerCase().includes(searchTerm);
+                                        
+                                        const matchesUserGroup = selectedUserGroup === 'All' || 
+                                            operator.usergroup === selectedUserGroup;
+                                        
+                                        const matchesCluster = selectedCluster === 'All' || 
+                                            operator.clustername === selectedCluster;
+                                        
+                                        return matchesSearch && matchesUserGroup && matchesCluster;
+                                    });
+                                    return filteredOperators.length;
+                                })()} of {operators.length} shown
                             </div>
                         </div>
 
-                        <div className="property-grid">
-                            {notifyFilteredOperators.length > 0 ? (
-                                notifyFilteredOperators.map((operator) => (
-                                    <div 
-                                        key={operator.userid} 
-                                        className={`property-card-modern ${selectedOperators.includes(operator.userid) ? 'selected' : ''}`}
-                                        onClick={() => handleOperatorSelect(operator.userid)}
-                                        style={{ position: 'relative', cursor: 'pointer' }}
-                                    >
-                                        <div className="property-image-section" style={{ height: '120px', backgroundColor: '#e9f0f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {operator.uimage ? (
-                                                <img 
-                                                    src={`data:image/jpeg;base64,${operator.uimage}`} 
-                                                    alt={`${operator.ufirstname}`}
-                                                    style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '4px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
-                                                />
-                                            ) : (
-                                                <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#007bff', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 'bold', border: '4px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                                                    {(operator.ufirstname?.[0] || '') + (operator.ulastname?.[0] || '')}
-                                                </div>
-                                            )}
-                                            <div className="property-type-badge" style={{ position: 'absolute', top: '10px', right: '10px', backgroundColor: operator.usergroup === 'Administrator' ? '#dc3545' : '#6f42c1' }}>
-                                                {operator.usergroup}
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="property-content">
-                                            <div className="property-header">
-                                                <h4 className="property-name-modern" style={{ textAlign: 'center', width: '100%' }}>{operator.ufirstname} {operator.ulastname}</h4>
-                                                <div className="property-location" style={{ textAlign: 'center', width: '100%', color: '#666', marginTop: '4px' }}>
-                                                    @{operator.username}
-                                                </div>
-                                            </div>
+                        <div className="operators-search-section">
+                            <div className="operators-search-container">
+                                <input
+                                    type="text"
+                                    placeholder="Search operators by name, username, or email..."
+                                    value={suggestSearchKey}
+                                    onChange={(e) => setSuggestSearchKey(e.target.value)}
+                                    className="operators-search-input"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="operators-filters-section">
+                            <div className="operators-filter-row">
+                                <select 
+                                    className="operators-filter-select"
+                                    value={selectedUserGroup}
+                                    onChange={(e) => setSelectedUserGroup(e.target.value)}
+                                >
+                                    <option value="All">All Roles</option>
+                                    <option value="Administrator">Administrator</option>
+                                    <option value="Moderator">Moderator</option>
+                                </select>
+                                <select 
+                                    className="operators-filter-select"
+                                    value={selectedCluster}
+                                    onChange={(e) => setSelectedCluster(e.target.value)}
+                                >
+                                    <option value="All">All Clusters</option>
+                                    {[...new Set(operators.map(op => op.clustername).filter(Boolean))].map(clusterName => (
+                                        <option key={clusterName} value={clusterName}>{clusterName}</option>
+                                    ))}
+                                </select>
+                                <button className="clear-filters-btn" onClick={clearFilters}>
+                                    🔄 Clear Filters
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="operators-select-all-section">
+                            <label className="operators-select-all-checkbox">
+                                <input
+                                    type="checkbox"
+                                    checked={(() => {
+                                        const filteredOperators = operators.filter(operator => {
+                                            const searchTerm = suggestSearchKey.toLowerCase();
+                                            const matchesSearch = !searchTerm || 
+                                                operator.ufirstname?.toLowerCase().includes(searchTerm) ||
+                                                operator.ulastname?.toLowerCase().includes(searchTerm) ||
+                                                operator.username?.toLowerCase().includes(searchTerm) ||
+                                                operator.uemail?.toLowerCase().includes(searchTerm);
                                             
-                                            <div className="property-stats" style={{ flexDirection: 'column', gap: '8px', alignItems: 'flex-start', marginTop: '15px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
-                                                <div className="guest-capacity" style={{ fontSize: '13px', wordBreak: 'break-all' }}>
-                                                    ✉️ {operator.uemail}
+                                            const matchesUserGroup = selectedUserGroup === 'All' || 
+                                                operator.usergroup === selectedUserGroup;
+                                            
+                                            const matchesCluster = selectedCluster === 'All' || 
+                                                operator.clustername === selectedCluster;
+                                            
+                                            return matchesSearch && matchesUserGroup && matchesCluster;
+                                        });
+                                        return filteredOperators.length > 0 && 
+                                               filteredOperators.every(op => selectedOperators.includes(op.userid));
+                                    })()}
+                                    onChange={(e) => {
+                                        const checked = e.target.checked;
+                                        const filteredOperators = operators.filter(operator => {
+                                            const searchTerm = suggestSearchKey.toLowerCase();
+                                            const matchesSearch = !searchTerm || 
+                                                operator.ufirstname?.toLowerCase().includes(searchTerm) ||
+                                                operator.ulastname?.toLowerCase().includes(searchTerm) ||
+                                                operator.username?.toLowerCase().includes(searchTerm) ||
+                                                operator.uemail?.toLowerCase().includes(searchTerm);
+                                            
+                                            const matchesUserGroup = selectedUserGroup === 'All' || 
+                                                operator.usergroup === selectedUserGroup;
+                                            
+                                            const matchesCluster = selectedCluster === 'All' || 
+                                                operator.clustername === selectedCluster;
+                                            
+                                            return matchesSearch && matchesUserGroup && matchesCluster;
+                                        });
+                                        
+                                        if (checked) {
+                                            // Add all filtered operators to selection
+                                            const newSelections = [...new Set([...selectedOperators, ...filteredOperators.map(op => op.userid)])];
+                                            setSelectedOperators(newSelections);
+                                        } else {
+                                            // Remove all filtered operators from selection
+                                            const filteredIds = filteredOperators.map(op => op.userid);
+                                            setSelectedOperators(selectedOperators.filter(id => !filteredIds.includes(id)));
+                                        }
+                                    }}
+                                />
+                                <span className="checkmark"></span>
+                                Select all filtered operators ({(() => {
+                                    const filteredOperators = operators.filter(operator => {
+                                        const searchTerm = suggestSearchKey.toLowerCase();
+                                        const matchesSearch = !searchTerm || 
+                                            operator.ufirstname?.toLowerCase().includes(searchTerm) ||
+                                            operator.ulastname?.toLowerCase().includes(searchTerm) ||
+                                            operator.username?.toLowerCase().includes(searchTerm) ||
+                                            operator.uemail?.toLowerCase().includes(searchTerm);
+                                        
+                                        const matchesUserGroup = selectedUserGroup === 'All' || 
+                                            operator.usergroup === selectedUserGroup;
+                                        
+                                        const matchesCluster = selectedCluster === 'All' || 
+                                            operator.clustername === selectedCluster;
+                                        
+                                        return matchesSearch && matchesUserGroup && matchesCluster;
+                                    });
+                                    return filteredOperators.length;
+                                })()})
+                            </label>
+                        </div>
+
+                        <div className="operators-list-container">
+                            {operators.length > 0 ? (
+                                <div className="operators-grid">
+                                    {operators
+                                        .filter(operator => {
+                                            const searchTerm = suggestSearchKey.toLowerCase();
+                                            const matchesSearch = !searchTerm || 
+                                                operator.ufirstname?.toLowerCase().includes(searchTerm) ||
+                                                operator.ulastname?.toLowerCase().includes(searchTerm) ||
+                                                operator.username?.toLowerCase().includes(searchTerm) ||
+                                                operator.uemail?.toLowerCase().includes(searchTerm);
+                                            
+                                            const matchesUserGroup = selectedUserGroup === 'All' || 
+                                                operator.usergroup === selectedUserGroup;
+                                            
+                                            const matchesCluster = selectedCluster === 'All' || 
+                                                operator.clustername === selectedCluster;
+                                            
+                                            return matchesSearch && matchesUserGroup && matchesCluster;
+                                        })
+                                        .map((operator) => (
+                                            <div 
+                                                key={operator.userid} 
+                                                className={`operator-card ${selectedOperators.includes(operator.userid) ? 'selected' : ''}`}
+                                                onClick={() => handleOperatorSelect(operator.userid)}
+                                            >
+                                                <div className="operator-checkbox-container">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedOperators.includes(operator.userid)}
+                                                        onChange={() => handleOperatorSelect(operator.userid)}
+                                                        className="operator-checkbox"
+                                                    />
                                                 </div>
-                                                <div className="guest-capacity" style={{ fontSize: '13px' }}>
-                                                    📍 {operator.clustername || 'No Cluster'}
+                                                
+                                                <div className="operator-avatar">
+                                                    {operator.uimage ? (
+                                                        <img 
+                                                            src={`data:image/jpeg;base64,${operator.uimage}`} 
+                                                            alt={`${operator.ufirstname} ${operator.ulastname}`}
+                                                            className="operator-avatar-img"
+                                                        />
+                                                    ) : (
+                                                        <div className="operator-avatar-placeholder">
+                                                            {(operator.ufirstname?.[0] || '') + (operator.ulastname?.[0] || '')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                <div className="operator-info">
+                                                    <div className="operator-name">
+                                                        {operator.ufirstname} {operator.ulastname}
+                                                    </div>
+                                                    <div className="operator-username">
+                                                        {operator.username}
+                                                    </div>
+                                                    <div className="operator-details">
+                                                        <span className="operator-email">
+                                                            ✉️ {operator.uemail}
+                                                        </span>
+                                                        <span className="operator-location">
+                                                            📍 {operator.clustername || 'No Cluster'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="operator-role-badge">
+                                                    {operator.usergroup}
                                                 </div>
                                             </div>
-                                        </div>
-                                        
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedOperators.includes(operator.userid)}
-                                            onChange={() => handleOperatorSelect(operator.userid)}
-                                            className="property-radio-hidden"
-                                            onClick={(e) => e.stopPropagation()}
-                                        />
-                                        
-                                        {selectedOperators.includes(operator.userid) && (
-                                            <div style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: '#28a745', color: 'white', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
-                                                ✓
-                                            </div>
-                                        )}
-                                    </div>
-                                ))
+                                        ))
+                                    }
+                                </div>
                             ) : (
-                                <div className="no-properties-message">
-                                    <p>No operators match your search criteria</p>
+                                <div className="no-operators-message">
+                                    <p>No operators available to notify</p>
                                 </div>
                             )}
-                            
-                            <button 
-                                className="confirm-suggestion-btn" 
-                                onClick={handleConfirmNotification}
-                                disabled={selectedOperators.length === 0 || isProcessing}
-                            >
-                                {isProcessing ? '⏳ Notifying Operators...' : `Notify ${selectedOperators.length} Selected Operator${selectedOperators.length !== 1 ? 's' : ''}`}
-                            </button>
+                        </div>
+
+                        <div className="operators-modal-footer">
+                            <div className="operators-selection-summary">
+                                {selectedOperators.length} operators selected
+                            </div>
+                            <div className="operators-action-buttons">
+                                <button 
+                                    className="operators-notify-btn" 
+                                    onClick={handleConfirmNotification}
+                                    disabled={selectedOperators.length === 0 || isProcessing}
+                                >
+                                    {isProcessing ? '⏳ Notifying Operators...' : 'Notify Selected Operators'}
+                                </button>
+                                <button 
+                                    className="operators-cancel-btn" 
+                                    onClick={() => setMessageBoxMode('')}
+                                >
+                                    Cancel
+                                </button>
+                                
+                            </div>
                         </div>
                     </div>
                 </div>

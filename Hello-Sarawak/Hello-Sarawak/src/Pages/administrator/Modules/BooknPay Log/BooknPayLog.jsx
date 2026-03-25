@@ -23,31 +23,66 @@ const BooknPayLog = () => {
   // Get userid from localStorage
   const userid = localStorage.getItem('userid');
 
-  // Helper to convert DB timestamp to local Malaysia time
+  // THE ULTIMATE SMART TIMESTAMP FORMATTER
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'N/A';
-    const date = new Date(timestamp);
-    // Fallback to raw string if date is invalid, otherwise format it
-    return isNaN(date.getTime()) ? timestamp : date.toLocaleString('en-MY', {
-      timeZone: 'Asia/Kuala_Lumpur',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    
+    try {
+        // 1. ADMIN FIX: The backend sends "DD/MM/YYYY HH:mm:ss" which is accidentally 8 hours ahead
+        if (typeof timestamp === 'string' && timestamp.includes('/')) {
+            const [datePart, timePart] = timestamp.split(' ');
+            const [day, month, year] = datePart.split('/');
+            
+            // Create a date object treating it as UTC
+            let dateObj = new Date(`${year}-${month}-${day}T${timePart || '00:00:00'}Z`);
+            
+            // Subtract 8 hours to fix the backend offset perfectly
+            dateObj.setUTCHours(dateObj.getUTCHours() - 8);
+
+            // Format it exactly like the Owner's view
+            return dateObj.toLocaleString('en-GB', {
+                timeZone: 'UTC',
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            }).replace('AM', 'am').replace('PM', 'pm');
+        } 
+        
+        // 2. OWNER FIX: The backend sends standard ISO time
+        let cleanTimestamp = timestamp;
+        if (typeof timestamp === 'string' && timestamp.endsWith('Z')) {
+            cleanTimestamp = timestamp.slice(0, -1);
+        }
+        
+        const dateObj = new Date(cleanTimestamp);
+        if (isNaN(dateObj.getTime())) return timestamp;
+
+        return dateObj.toLocaleString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        }).replace('AM', 'am').replace('PM', 'pm'); 
+        
+    } catch (e) {
+        return timestamp; // Fallback so app never crashes
+    }
   };
 
   // Replace useEffect with React Query
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ['bookLogs', userid],
     queryFn: () => fetchBookLog(userid),
-    enabled: !!userid, // Only run query if userid exists
+    enabled: !!userid, 
     onError: (error) => {
       console.error('Failed to fetch Book & Pay Logs:', error);
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000, 
   });
 
   const handleApplyFilters = () => {
@@ -66,6 +101,7 @@ const BooknPayLog = () => {
         { value: 'Request', label: 'Request' },
         { value: 'Payment', label: 'Payment' },
         { value: 'Update', label: 'Update' },
+        { value: 'Delete', label: 'Delete' }, 
       ],
     },
   ];
@@ -92,7 +128,7 @@ const BooknPayLog = () => {
     if (action === 'view') {
       const essentialFields = {
         userid: log.userid || 'N/A',
-        timestamp: formatTimestamp(log.timestamp), // Updated to use formatted time
+        timestamp: formatTimestamp(log.timestamp), // Formatted perfectly for Modal
         action: log.action || 'N/A',
         username: log.username || 'N/A',
       };
@@ -108,7 +144,7 @@ const BooknPayLog = () => {
     { 
       header: 'Timestamp', 
       accessor: 'timestamp',
-      render: (log) => formatTimestamp(log.timestamp) // Updated to render formatted time in the table
+      render: (log) => formatTimestamp(log.timestamp) // Formatted perfectly for Table
     },
     { header: 'Action', accessor: 'action' },
     { header: 'Actioned By', accessor: 'username' },

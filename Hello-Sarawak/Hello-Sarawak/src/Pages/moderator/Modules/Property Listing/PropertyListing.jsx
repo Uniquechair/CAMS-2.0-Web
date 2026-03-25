@@ -32,19 +32,21 @@ const PropertyListing = () => {
     
     const queryClient = useQueryClient();
     
-    // Use React Query to fetch properties
     const { data, isLoading, error } = useQuery({
         queryKey: ['properties', page, pageSize, appliedFilters],
         queryFn: () => fetchPropertiesListingTable(page, pageSize, appliedFilters.status !== 'All' ? appliedFilters.status : undefined),
-        select: (data) => ({
-            properties: (data?.properties || []).filter(property => property.propertyid !== undefined),
-            totalCount: data?.totalCount || 0
-        }),
+        select: (data) => {
+            const validProps = (data?.properties || []).filter(property => property.propertyid !== undefined);
+            const sortedProps = validProps.sort((a, b) => parseInt(b.propertyid) - parseInt(a.propertyid));
+            return {
+                properties: sortedProps,
+                totalCount: data?.totalCount || 0
+            };
+        },
         staleTime: 30 * 60 * 1000,
-        refetchInterval: 1000,  
+        refetchInterval: 1000,
     });
-    
-    // Extract properties from query result
+
     const properties = data?.properties || [];
     const totalCount = data?.totalCount || 0;
 
@@ -55,7 +57,6 @@ const PropertyListing = () => {
         setTimeout(() => setShowToast(false), 5000);
     };
 
-    // React Query mutation for accepting property (enabling)
     const acceptMutation = useMutation({
         mutationFn: async (propertyId) => {
             return updatePropertyStatus(propertyId, 'Pending');
@@ -68,7 +69,6 @@ const PropertyListing = () => {
         }
     });
 
-    // React Query mutation for rejecting property (disabling)
     const rejectMutation = useMutation({
         mutationFn: async (propertyId) => {
             await propertyListingReject(propertyId);
@@ -82,7 +82,6 @@ const PropertyListing = () => {
         }
     });
 
-    // React Query mutation for deleting property
     const deleteMutation = useMutation({
         mutationFn: async (propertyId) => {
             return deleteProperty(propertyId);
@@ -103,7 +102,63 @@ const PropertyListing = () => {
     const handleAction = async (action, property) => {
         try {
             if (action === 'view') {
+                
+                // BEAUTIFUL DECODER FOR VIEW DETAILS (Works for both Admin and Moderator)
+                let rawDesc = property.propertydescription || 'N/A';
+                let finalDesc = rawDesc;
+
+                if (rawDesc.includes("_ROOMDATA_")) {
+                    const parts = rawDesc.split("_ROOMDATA_");
+                    const cleanDesc = parts[0]; 
+                    
+                    try {
+                        const roomsList = JSON.parse(parts[1]);
+                        
+                        finalDesc = (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                <div style={{ fontSize: '15px', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap', marginBottom: '10px' }}>
+                                    {cleanDesc}
+                                </div>
+                                
+                                <div style={{ fontWeight: 'bold', fontSize: '18px', borderBottom: '2px solid #eaeaea', paddingBottom: '8px', color: '#333' }}>
+                                    Room Configurations
+                                </div>
+                                
+                                {roomsList.map((r, i) => (
+                                    <div key={i} style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '16px', backgroundColor: '#f9fcff' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#0056b3', fontSize: '16px', marginBottom: '12px' }}>
+                                            {r.name}
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '14px', color: '#555' }}>
+                                            <div><strong>Bed:</strong> {r.bedType}</div>
+                                            <div><strong>Guests:</strong> Max {r.maxGuests}</div>
+                                            <div style={{ gridColumn: 'span 2' }}><strong>Base Price:</strong> RM {r.price}</div>
+                                        </div>
+
+                                        {r.options && r.options.length > 0 && (
+                                            <div style={{ marginTop: '12px', borderTop: '1px dashed #ccc', paddingTop: '12px' }}>
+                                                <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#333', marginBottom: '6px' }}>Variations:</div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '10px' }}>
+                                                    {r.options.map((o, idx) => (
+                                                        <div key={idx} style={{ fontSize: '14px', color: '#555' }}>
+                                                            • {o.name}: <span style={{ fontWeight: 'bold', color: '#28a745' }}>RM {o.price}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        );
+                    } catch(e) {
+                        console.error("Error parsing room data for view details", e);
+                        finalDesc = cleanDesc; 
+                    }
+                }
+
                 setSelectedProperty({
+                    propertyid: property.propertyid || 'N/A',
                     propertyname: property.propertyaddress || 'N/A',
                     clustername: property.clustername || 'N/A',
                     categoryname: property.categoryname || 'N/A',
@@ -112,7 +167,7 @@ const PropertyListing = () => {
                     propertyguestpaxno: property.propertyguestpaxno || 'N/A',
                     propertystatus: property.propertystatus || 'N/A',
                     propertybedtype: property.propertybedtype || 'N/A',
-                    propertydescription: property.propertydescription || 'N/A',
+                    propertydescription: finalDesc, 
                     images: property.propertyimage || [],
                     username: property.username || 'N/A',
                 });
@@ -124,9 +179,11 @@ const PropertyListing = () => {
                 setEditProperty({ ...property });
                 setIsPropertyFormOpen(true);
             } else if (action === 'enable') {
+                displayToast('success', 'Processing request...');
                 await acceptMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Enabled Successfully');
             } else if (action === 'disable') {
+                displayToast('success', 'Processing request...');
                 await rejectMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Disabled Successfully');
             } else if (action === 'delete') {
@@ -161,7 +218,6 @@ const PropertyListing = () => {
                 return;
             }
 
-            // Use React Query to fetch reservations
             const reservationsQuery = await queryClient.fetchQuery({
                 queryKey: ['reservations', propertyToDelete],
                 queryFn: fetchReservation
@@ -176,7 +232,8 @@ const PropertyListing = () => {
                 return;
             }
 
-            deleteMutation.mutate(propertyToDelete);
+            displayToast('success', 'Processing deletion...');
+            await deleteMutation.mutateAsync(propertyToDelete);
         } catch (error) {
             console.error('Failed to delete property:', error);
             displayToast('error', 'Failed to delete property. Please try again.');
@@ -187,6 +244,7 @@ const PropertyListing = () => {
 
     const handleApplyFilters = () => {
         setAppliedFilters({ status: selectedStatus });
+        setPage(1);
     };
 
     const filters = [
@@ -205,6 +263,7 @@ const PropertyListing = () => {
     ];
 
     const displayLabels = {
+        propertyid: "PID",
         propertyname: "Property Name",
         clustername: "Cluster Name",
         categoryname: "Category Name",
@@ -222,7 +281,6 @@ const PropertyListing = () => {
     const usergroup = localStorage.getItem('usergroup');
 
     const filteredProperties = properties.filter((property) => {
-
         if (usergroup === 'Moderator' && property.username !== username) {
             return false;
         }
@@ -240,83 +298,78 @@ const PropertyListing = () => {
     });
 
     const propertyDropdownItems = (property, username, usergroup) => {
-    const isModerator = usergroup === 'Moderator';
+        const isModerator = usergroup === 'Moderator';
+        const { propertystatus } = property;
 
-    const { propertystatus } = property;
-
-    if (isModerator) {
-        // Logic for moderator
-        if (propertystatus === 'Pending') {
-            return [
-                { label: 'View Details', icon: <FaEye />, action: 'view' },
-            ];
-        } else if (propertystatus === 'Available') {
-            return [
-                { label: 'View Details', icon: <FaEye />, action: 'view' },
-                { label: 'Edit', icon: <FaEdit />, action: 'edit' },
-                { label: 'Disable', icon: <FaTimes />, action: 'disable' },
-            ];
-        } else if (propertystatus === 'Unavailable') {
-            return [
-                { label: 'View Details', icon: <FaEye />, action: 'view' },
-                { label: 'Edit', icon: <FaEdit />, action: 'edit' },
-                { label: 'Enable', icon: <FaCheck />, action: 'enable' },
-            ];
+        if (isModerator) {
+            if (propertystatus === 'Pending') {
+                return [
+                    { label: 'View Details', icon: <FaEye />, action: 'view' },
+                ];
+            } else if (propertystatus === 'Available') {
+                return [
+                    { label: 'View Details', icon: <FaEye />, action: 'view' },
+                    { label: 'Edit', icon: <FaEdit />, action: 'edit' },
+                    { label: 'Disable', icon: <FaTimes />, action: 'disable' },
+                ];
+            } else if (propertystatus === 'Unavailable') {
+                return [
+                    { label: 'View Details', icon: <FaEye />, action: 'view' },
+                    { label: 'Edit', icon: <FaEdit />, action: 'edit' },
+                    { label: 'Enable', icon: <FaCheck />, action: 'enable' },
+                ];
+            }
         }
-    }
-    // Default: View only
-    return [{ label: 'View Details', icon: <FaEye />, action: 'view' }];
-};
+        return [{ label: 'View Details', icon: <FaEye />, action: 'view' }];
+    };
 
     
-const columns = [
-    { header: 'ID', accessor: 'propertyid' },
-    {
-        header: 'Image',
-        accessor: 'propertyimage',
-        render: (property) => (
-            property.propertyimage && property.propertyimage.length > 0 ? (
-                <img
-                    src={`data:image/jpeg;base64,${property.propertyimage[0]}`}
-                    alt={property.propertyname}
-                    style={{ width: 80, height: 80 }}
+    const columns = [
+        { header: 'ID', accessor: 'propertyid' },
+        {
+            header: 'Image',
+            accessor: 'propertyimage',
+            render: (property) => (
+                property.propertyimage && property.propertyimage.length > 0 ? (
+                    <img
+                        src={`data:image/jpeg;base64,${property.propertyimage[0]}`}
+                        alt={property.propertyname}
+                        style={{ width: 80, height: 80 }}
+                    />
+                ) : (
+                    <span>No Image</span>
+                )
+            ),
+        },
+        { header: 'Name', accessor: 'propertyaddress' },
+        { header: 'Price(RM)', accessor: 'normalrate' },
+        { header: 'Cluster', accessor: 'clustername' },
+        {
+            header: 'Status',
+            accessor: 'propertystatus',
+            render: (property) => (
+                <Status value={property.propertystatus || 'Pending'} />
+            ),
+        },
+        {
+            header: 'Actions',
+            accessor: 'actions',
+            render: (property) => (
+                <ActionDropdown
+                    items={propertyDropdownItems(property, username, usergroup)}
+                    onAction={(action) => handleAction(action, property)}
                 />
-            ) : (
-                <span>No Image</span>
-            )
-        ),
-    },
-    { header: 'Name', accessor: 'propertyaddress' },
-    { header: 'Price(RM)', accessor: 'normalrate' },
-    { header: 'Cluster', accessor: 'clustername' },
-    {
-        header: 'Status',
-        accessor: 'propertystatus',
-        render: (property) => (
-            <Status value={property.propertystatus || 'Pending'} />
-        ),
-    },
-    {
-        header: 'Actions',
-        accessor: 'actions',
-        render: (property) => (
-            <ActionDropdown
-                items={propertyDropdownItems(property, username, usergroup)}
-                onAction={(action) => handleAction(action, property)}
-            />
-        ),
-    },
-];
+            ),
+        },
+    ];
 
-    // Handle page change
     const handlePageChange = (newPage) => {
         setPage(newPage);
     };
 
-    // Handle page size change
     const handlePageSizeChange = (newPageSize) => {
         setPageSize(newPageSize);
-        setPage(1); // Reset to first page when changing page size
+        setPage(1);
     };
 
     return (
@@ -353,7 +406,7 @@ const columns = [
                 rowKey="propertyid"
                 currentPage={page}
                 pageSize={pageSize}
-                totalCount={totalCount}
+                totalCount={filteredProperties.length}
                 onPageChange={handlePageChange}
                 onPageSizeChange={handlePageSizeChange}
             />
@@ -361,7 +414,7 @@ const columns = [
 
             <Modal
                 isOpen={!!selectedProperty}
-                title={`${selectedProperty?.propertyname}`}
+                title={'Property Details'}
                 data={selectedProperty || {}}
                 labels={displayLabels}
                 onClose={() => setSelectedProperty(null)}
@@ -370,11 +423,21 @@ const columns = [
             {isPropertyFormOpen && (
                 <PropertyForm
                     initialData={editProperty}
-                    onSubmit={() => {
-                    setIsPropertyFormOpen(false);
-                    queryClient.invalidateQueries({ queryKey: ['properties'] });
-                    displayToast('success', editProperty? 'Property updated successfully' : 'Property created successfully');
-                }}
+                    onSubmit={async () => {
+                        setIsPropertyFormOpen(false);
+                        displayToast('success', 'Processing request...'); 
+                        
+                        try {
+                            await queryClient.invalidateQueries({ queryKey: ['properties'] });
+                            displayToast('success', editProperty ? 'Property updated successfully' : 'Property created successfully');
+                            
+                            if (!editProperty) {
+                                setPage(1); 
+                            }
+                        } catch (error) {
+                            displayToast('error', 'Failed to refresh properties.');
+                        }
+                    }}
                     onClose={() => setIsPropertyFormOpen(false)}
             />
         )}

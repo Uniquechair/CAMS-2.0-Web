@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { fetchPropertiesListingTable, updatePropertyStatus, deleteProperty, propertyListingAccept, propertyListingReject, fetchReservation } from '../../../../../Api/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ActionDropdown from '../../../../Component/ActionDropdown/ActionDropdown';
@@ -32,15 +32,17 @@ const PropertyListing = () => {
     
     const queryClient = useQueryClient();
     
+    // Timer Ref to perfectly control toast duration
+    const toastTimerRef = useRef(null);
+    
     const { data, isLoading, error } = useQuery({
         queryKey: ['properties', page, pageSize], 
         queryFn: () => fetchPropertiesListingTable(page, pageSize), 
         placeholderData: (previousData) => previousData,
         select: (data) => {
-            // Ensure properties are valid
             const validProps = (data?.properties || []).filter(property => property.propertyid !== undefined);
             
-            // FIXED: Force exact sorting so Newest Properties ALWAYS show up on top
+            // Force exact sorting so Newest Properties ALWAYS show up on top
             const sortedProps = validProps.sort((a, b) => parseInt(b.propertyid) - parseInt(a.propertyid));
 
             return {
@@ -54,11 +56,22 @@ const PropertyListing = () => {
     const properties = data?.properties || [];
     const totalCount = data?.totalCount || 0;
 
-    const displayToast = (type, message) => {
+    // SMART TOAST: Added `isSticky` parameter. If true, the toast waits forever!
+    const displayToast = (type, message, isSticky = false) => {
         setToastType(type);
         setToastMessage(message);
         setShowToast(true);
-        setTimeout(() => setShowToast(false), 5000);
+        
+        // Clear any existing timer so it doesn't accidentally hide early
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+            toastTimerRef.current = null;
+        }
+        
+        // Only set the 5-second auto-hide if it is NOT sticky
+        if (!isSticky) {
+            toastTimerRef.current = setTimeout(() => setShowToast(false), 5000);
+        }
     };
 
     const acceptMutation = useMutation({
@@ -137,7 +150,6 @@ const PropertyListing = () => {
         try {
             if (action === 'view') {
                 
-                // FIXED: Transforms raw JSON string into a highly readable, beautiful visual layout for the Admin Modal!
                 let rawDesc = property.propertydescription || 'N/A';
                 let finalDesc = rawDesc;
 
@@ -214,19 +226,19 @@ const PropertyListing = () => {
                 setEditProperty({ ...property });
                 setIsPropertyFormOpen(true);
             } else if (action === 'accept') {
-                displayToast('success', 'Processing request...');
+                displayToast('success', 'Processing request...', true); // Sticky while waiting
                 await acceptMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Accepted Successfully');
             } else if (action === 'reject') {
-                displayToast('success', 'Processing request...');
+                displayToast('success', 'Processing request...', true); // Sticky while waiting
                 await rejectMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Rejected Successfully');
             } else if (action === 'enable') {
-                displayToast('success', 'Processing request...');
+                displayToast('success', 'Processing request...', true); // Sticky while waiting
                 await acceptMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Enabled Successfully');
             } else if (action === 'disable') {
-                displayToast('success', 'Processing request...');
+                displayToast('success', 'Processing request...', true); // Sticky while waiting
                 await rejectMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Disabled Successfully');
             } else if (action === 'delete') {
@@ -273,7 +285,7 @@ const PropertyListing = () => {
                 return;
             }
 
-            displayToast('success', 'Processing deletion...');
+            displayToast('success', 'Processing request...', true); // Sticky while deleting
             await deleteMutation.mutateAsync(propertyToDelete);
         } catch (error) {
             console.error('Failed to delete property:', error);
@@ -506,19 +518,36 @@ const PropertyListing = () => {
                     initialData={editProperty}
                     onSubmit={async () => {
                         setIsPropertyFormOpen(false);
-                        displayToast('success', 'Refreshing Property List...'); 
+                        
+                        // 1. Show the original text BUT keep it "sticky" (it will NOT timeout or disappear)
+                        displayToast('success', 'Processing request...', true); 
                         
                         try {
-                            await queryClient.invalidateQueries({ queryKey: ['properties'] });
+                            // 2. Give the database 1.5 seconds to cleanly finish inserting the row
+                            await new Promise(resolve => setTimeout(resolve, 1500));
 
-                            displayToast('success', editProperty ? 'Property updated successfully' : 'Property created successfully');
-                            
-                            // Always return to page 1 where the newest property lands due to the sort
+                            // 3. Determine where the property will be shown (Page 1 for New, Current Page for Edit)
+                            const targetPage = editProperty ? page : 1;
                             if (!editProperty) {
                                 setPage(1); 
                             }
+                            
+                            // 4. Force the network to download the exact page we are about to look at, and WAIT until it finishes
+                            await queryClient.fetchQuery({
+                                queryKey: ['properties', targetPage, pageSize],
+                                queryFn: () => fetchPropertiesListingTable(targetPage, pageSize)
+                            });
+                            
+                            // 5. Invalidate caches so the table redraws immediately
+                            await queryClient.invalidateQueries({ queryKey: ['properties'] });
+
+                            // 6. Give React 300ms to paint the new row on the screen, then overwrite the toast with Success!
+                            setTimeout(() => {
+                                displayToast('success', editProperty ? 'Property updated successfully' : 'Property created successfully');
+                            }, 300);
+                            
                         } catch (error) {
-                            displayToast('error', 'Failed to refresh properties.');
+                            displayToast('error', 'An error occurred while processing your request.');
                         }
                     }}
                     onClose={() => setIsPropertyFormOpen(false)}

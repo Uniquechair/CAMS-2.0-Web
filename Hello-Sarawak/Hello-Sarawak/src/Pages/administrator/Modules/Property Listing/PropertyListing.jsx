@@ -12,8 +12,49 @@ import Alert from '../../../../Component/Alert/Alert';
 import Loader from '../../../../Component/Loader/Loader';
 import Status from '../../../../Component/Status/Status';
 import { FaEye, FaEdit, FaTrash, FaCheck, FaTimes } from 'react-icons/fa';
+import { IoIosArrowBack, IoIosArrowForward } from "react-icons/io"; 
 import '../../../../Component/MainContent/MainContent.css';
 import '../Property Listing/PropertyListing.css';
+
+// BEAUTIFUL IMAGE SLIDER COMPONENT FOR THE MODAL
+const ImageCarousel = ({ images }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    if (!images || images.length === 0) return <span style={{ color: '#888' }}>No Image Available</span>;
+
+    const nextSlide = (e) => {
+        e.stopPropagation();
+        setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    };
+
+    const prevSlide = (e) => {
+        e.stopPropagation();
+        setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    };
+
+    return (
+        <div style={{ position: 'relative', width: '100%', height: '250px', borderRadius: '8px', overflow: 'hidden', marginBottom: '10px', backgroundColor: '#f0f0f0' }}>
+            <img
+                src={`data:image/jpeg;base64,${images[currentIndex]}`}
+                alt={`Slide ${currentIndex + 1}`}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+            {images.length > 1 && (
+                <>
+                    <button type="button" onClick={prevSlide} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', fontSize: '18px', color: '#333' }}>
+                        <IoIosArrowBack />
+                    </button>
+                    <button type="button" onClick={nextSlide} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', fontSize: '18px', color: '#333' }}>
+                        <IoIosArrowForward />
+                    </button>
+                    <div style={{ position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.8)', color: 'white', padding: '4px 12px', borderRadius: '15px', fontSize: '14px', fontWeight: 'bold', letterSpacing: '1px' }}>
+                        {currentIndex + 1} / {images.length}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
 
 const PropertyListing = () => {
     const [searchKey, setSearchKey] = useState('');
@@ -32,7 +73,6 @@ const PropertyListing = () => {
     
     const queryClient = useQueryClient();
     
-    // Timer Ref to perfectly control toast duration
     const toastTimerRef = useRef(null);
     
     const { data, isLoading, error } = useQuery({
@@ -41,8 +81,6 @@ const PropertyListing = () => {
         placeholderData: (previousData) => previousData,
         select: (data) => {
             const validProps = (data?.properties || []).filter(property => property.propertyid !== undefined);
-            
-            // Force exact sorting so Newest Properties ALWAYS show up on top
             const sortedProps = validProps.sort((a, b) => parseInt(b.propertyid) - parseInt(a.propertyid));
 
             return {
@@ -56,19 +94,16 @@ const PropertyListing = () => {
     const properties = data?.properties || [];
     const totalCount = data?.totalCount || 0;
 
-    // SMART TOAST: Added `isSticky` parameter. If true, the toast waits forever!
     const displayToast = (type, message, isSticky = false) => {
         setToastType(type);
         setToastMessage(message);
         setShowToast(true);
         
-        // Clear any existing timer so it doesn't accidentally hide early
         if (toastTimerRef.current) {
             clearTimeout(toastTimerRef.current);
             toastTimerRef.current = null;
         }
         
-        // Only set the 5-second auto-hide if it is NOT sticky
         if (!isSticky) {
             toastTimerRef.current = setTimeout(() => setShowToast(false), 5000);
         }
@@ -203,18 +238,19 @@ const PropertyListing = () => {
                     }
                 }
 
+                // FIXED: Changed key to 'galleryWidget' to bypass the Modal's broken interceptor!
                 setSelectedProperty({
+                    galleryWidget: <ImageCarousel images={property.propertyimage || []} />,
                     propertyid: property.propertyid || 'N/A',
                     propertyname: property.propertyaddress || 'N/A',
                     clustername: property.clustername || 'N/A',
                     categoryname: property.categoryname || 'N/A',
-                    propertyprice: property.normalrate || 'N/A',
+                    propertyprice: property.normalrate ? `RM ${property.normalrate}` : 'N/A',
                     propertylocation: property.nearbylocation || 'N/A',
                     propertyguestpaxno: property.propertyguestpaxno || 'N/A',
                     propertystatus: property.propertystatus || 'N/A',
                     propertybedtype: property.propertybedtype || 'N/A',
                     propertydescription: finalDesc, 
-                    images: property.propertyimage || [],
                     username: property.username || 'N/A',
                 });
 
@@ -226,19 +262,19 @@ const PropertyListing = () => {
                 setEditProperty({ ...property });
                 setIsPropertyFormOpen(true);
             } else if (action === 'accept') {
-                displayToast('success', 'Processing request...', true); // Sticky while waiting
+                displayToast('success', 'Processing request...', true); 
                 await acceptMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Accepted Successfully');
             } else if (action === 'reject') {
-                displayToast('success', 'Processing request...', true); // Sticky while waiting
+                displayToast('success', 'Processing request...', true); 
                 await rejectMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Rejected Successfully');
             } else if (action === 'enable') {
-                displayToast('success', 'Processing request...', true); // Sticky while waiting
+                displayToast('success', 'Processing request...', true); 
                 await acceptMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Enabled Successfully');
             } else if (action === 'disable') {
-                displayToast('success', 'Processing request...', true); // Sticky while waiting
+                displayToast('success', 'Processing request...', true); 
                 await rejectMutation.mutateAsync(property.propertyid);
                 displayToast('success', 'Property Disabled Successfully');
             } else if (action === 'delete') {
@@ -285,7 +321,7 @@ const PropertyListing = () => {
                 return;
             }
 
-            displayToast('success', 'Processing request...', true); // Sticky while deleting
+            displayToast('success', 'Processing request...', true); 
             await deleteMutation.mutateAsync(propertyToDelete);
         } catch (error) {
             console.error('Failed to delete property:', error);
@@ -314,9 +350,11 @@ const PropertyListing = () => {
         },
     ];
 
+    // FIXED: Maps our safe 'galleryWidget' to a single blank space so the modal doesn't hide it!
     const displayLabels = {
+        galleryWidget: " ", 
         propertyid: "PID",
-        propertyname: "Property Name",
+        propertyname: "Propertyaddress", 
         clustername: "Cluster Name",
         categoryname: "Category Name",
         propertyprice: "Property Price",
@@ -325,7 +363,6 @@ const PropertyListing = () => {
         propertystatus: "Property Status",
         propertybedtype: "Bed Type",
         propertydescription: "Description",
-        images: "Images",
         username: "Operator Name"
     };
 
@@ -519,29 +556,23 @@ const PropertyListing = () => {
                     onSubmit={async () => {
                         setIsPropertyFormOpen(false);
                         
-                        // 1. Show the original text BUT keep it "sticky" (it will NOT timeout or disappear)
                         displayToast('success', 'Processing request...', true); 
                         
                         try {
-                            // 2. Give the database 1.5 seconds to cleanly finish inserting the row
                             await new Promise(resolve => setTimeout(resolve, 1500));
 
-                            // 3. Determine where the property will be shown (Page 1 for New, Current Page for Edit)
                             const targetPage = editProperty ? page : 1;
                             if (!editProperty) {
                                 setPage(1); 
                             }
                             
-                            // 4. Force the network to download the exact page we are about to look at, and WAIT until it finishes
                             await queryClient.fetchQuery({
                                 queryKey: ['properties', targetPage, pageSize],
                                 queryFn: () => fetchPropertiesListingTable(targetPage, pageSize)
                             });
                             
-                            // 5. Invalidate caches so the table redraws immediately
                             await queryClient.invalidateQueries({ queryKey: ['properties'] });
 
-                            // 6. Give React 300ms to paint the new row on the screen, then overwrite the toast with Success!
                             setTimeout(() => {
                                 displayToast('success', editProperty ? 'Property updated successfully' : 'Property created successfully');
                             }, 300);

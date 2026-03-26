@@ -119,6 +119,8 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
         propertyPrice: "1", 
         propertyAddress: "",
         nearbyLocation: "",
+        latitude: "", // Added safely
+        longitude: "", // Added safely
         propertyDescription: "",
         facilities: [],
         propertyImage: [],
@@ -152,8 +154,6 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
     const fileInputRef = useRef(null);
     const locationInputRef = useRef(null);
     const [showMoreAmenities, setShowMoreAmenities] = useState(false);
-    
-    // NEW: Loading State to prevent UI Freeze
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     const userid = localStorage.getItem("userid");
@@ -215,6 +215,8 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
                 propertyPrice: initialData.normalrate || "1",
                 propertyAddress: initialData.propertyaddress || "",
                 nearbyLocation: initialData.nearbylocation || "",
+                latitude: initialData.latitude || "", // Safely populate
+                longitude: initialData.longitude || "", // Safely populate
                 propertyDescription: desc,
                 facilities: facilitiesArray,
                 propertyImage: initialData.propertyimage || [],
@@ -261,8 +263,29 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
             const autocomplete = new window.google.maps.places.Autocomplete(locationInputRef.current);
             autocomplete.addListener('place_changed', () => {
                 const place = autocomplete.getPlace();
-                if (place && place.formatted_address) {
-                    setFormData((prev) => ({ ...prev, nearbyLocation: place.formatted_address }));
+                
+                if (place) {
+                    // FIXED: Grab the formatted address (usually the road/street info)
+                    let finalLocation = place.formatted_address || "";
+                    
+                    // FIXED: Check if they selected a specific landmark (e.g., Hilton Hotel)
+                    // If the landmark name is not already inside the address, we prepend it!
+                    if (place.name && finalLocation && !finalLocation.includes(place.name)) {
+                        finalLocation = `${place.name}, ${finalLocation}`;
+                    } else if (place.name && !finalLocation) {
+                        finalLocation = place.name;
+                    }
+
+                    // FIXED: Safely grab map coordinates in case your backend uses them for visuals
+                    const lat = place.geometry?.location?.lat() || "";
+                    const lng = place.geometry?.location?.lng() || "";
+
+                    setFormData((prev) => ({ 
+                        ...prev, 
+                        nearbyLocation: finalLocation,
+                        latitude: lat,
+                        longitude: lng
+                    }));
                 }
             });
         }
@@ -525,7 +548,6 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
             }
         }
 
-        // TRIGGER LOADING STATE HERE
         setIsSubmitting(true);
 
         try {
@@ -548,6 +570,12 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
             data.append("propertyPrice", formData.propertyPrice); 
             data.append("propertyAddress", formData.propertyAddress);
             data.append("nearbyLocation", formData.nearbyLocation);
+            
+            // FIXED: Append coordinates if they exist!
+            if (formData.latitude && formData.longitude) {
+                data.append("latitude", formData.latitude);
+                data.append("longitude", formData.longitude);
+            }
 
             data.append("propertyDescription", `${formData.propertyDescription}_ROOMDATA_${JSON.stringify(processedRooms)}`);
             
@@ -610,7 +638,6 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
             }
            
             if (response && response.message) {
-                // We let PropertyListing handle the toast so the UI closes smoothly
                 onSubmit();
             }
         } catch (error) {
@@ -629,6 +656,8 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
             propertyPrice: "1",
             propertyAddress: "",
             nearbyLocation: "",
+            latitude: "", // Added
+            longitude: "", // Added
             propertyDescription: "",
             facilities: [],
             propertyImage: [],
@@ -1159,7 +1188,6 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
                             Reset
                         </button>
                         
-                        {/* CHANGED: Dynamic button text to prevent freeze perception */}
                         <button type="submit" className="property-form-submit-button" disabled={isSubmitting}>
                             {isSubmitting ? "Processing... Please wait" : (initialData ? "Update Property" : "Create Property")}
                         </button>

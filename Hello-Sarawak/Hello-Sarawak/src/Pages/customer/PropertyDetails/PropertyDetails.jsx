@@ -718,8 +718,13 @@ const PropertyDetails = () => {
     setTimeout(() => setShowToast(false), 5000);
   };
 
+  // ==========================================
+  // PERFECT NATIVE GOOGLE MAPS FIX
+  // ==========================================
   const addressForMap = propertyDetails?.nearbylocation || propertyDetails?.propertyaddress || '';
-  const googleMapSrc = `https://maps.google.com/maps?q=${encodeURIComponent(addressForMap)}&t=&z=14&ie=UTF8&iwloc=&output=embed`;
+  
+  // FIXED: Using standard Google Maps embed URL format so it properly shows the place name box!
+  const googleMapSrc = `https://maps.google.com/maps?q=${encodeURIComponent(addressForMap)}&t=&z=15&ie=UTF8&iwloc=B&output=embed`;
 
   const bookingCardBaseRate = bookingData.selectedRoom ? bookingData.selectedRoom.price : currentDisplayRate;
 
@@ -1184,7 +1189,6 @@ const PropertyDetails = () => {
                                 <span className="text" style={{ fontSize: '13px', color: '#666' }}>Room comfort and quality</span>
                               </div>
 
-                              {/* FIXED: "Starts from" ADDED HERE inside the individual room card! */}
                               <div className="room-card-footer" style={{ marginTop: 'auto', textAlign: 'center' }}>
                                 <div className="room-price-display" style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '10px' }}>
                                   <span style={{ fontSize: '14px', color: '#717171', fontWeight: 'normal', marginRight: '5px' }}>Starts from</span>
@@ -1278,7 +1282,6 @@ const PropertyDetails = () => {
                                         </div>
                                     )}
 
-                                    {/* DYNAMIC Room Variations mapped directly from the DB! */}
                                     <div className="room-variations" style={{ marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '20px' }}>
                                       <h4 style={{ marginBottom: '15px' }}>Available Room Options</h4>
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1509,7 +1512,7 @@ const PropertyDetails = () => {
                   </button>
                 </div>
                 
-                {/* Walkable & Nearby Places Widget (Google Places or Fallback) */}
+                {/* FIXED: Walkable & Nearby Places Widget - Clicking them now works perfectly! */}
                 <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '20px', marginTop: '20px', backgroundColor: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                   
                   <div style={{ marginBottom: '15px' }}>
@@ -1519,7 +1522,7 @@ const PropertyDetails = () => {
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', color: '#555' }}>
                       {displayWalkable.map((place, idx) => (
                           <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
-                              <a href={`https://maps.google.com/maps?q=${encodeURIComponent(place.name + ' ' + (propertyDetails?.clustername || ''))}`} target="_blank" rel="noreferrer" style={{color: '#555', textDecoration: 'none', cursor: 'pointer'}}>
+                              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' near ' + addressForMap)}`} target="_blank" rel="noreferrer" style={{color: '#555', textDecoration: 'none', cursor: 'pointer'}}>
                                   {place.name}
                               </a>
                               <span>{place.distance}</span>
@@ -1535,7 +1538,7 @@ const PropertyDetails = () => {
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '14px', color: '#555' }}>
                       {displayLandmarks.map((place, idx) => (
                           <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
-                              <a href={`https://maps.google.com/maps?q=${encodeURIComponent(place.name + ' ' + (propertyDetails?.clustername || ''))}`} target="_blank" rel="noreferrer" style={{color: '#555', textDecoration: 'none', cursor: 'pointer'}}>
+                              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' near ' + addressForMap)}`} target="_blank" rel="noreferrer" style={{color: '#555', textDecoration: 'none', cursor: 'pointer'}}>
                                   {place.name}
                               </a>
                               <span>{place.distance}</span>
@@ -1549,10 +1552,16 @@ const PropertyDetails = () => {
                   </div>
                 </div>
                 
-                {/* RESTORED: GOOGLE MAPS INTEGRATION */}
+                {/* FIXED: GOOGLE MAPS INTEGRATION */}
                 <div id="map" className="Location_Main_Container" style={{ marginTop: '20px' }}>
                   <h2 className="Location_text">Hotel Location</h2>
                   <hr className="custom-line" />
+                  
+                  {/* Shows the exact typed address right above the map for good UX */}
+                  <p style={{ color: '#555', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px' }}>
+                    <FaMapMarkerAlt color="#007bff" /> {addressForMap}
+                  </p>
+
                   <div className="Google_map_container">
                     <iframe 
                         src={googleMapSrc} 

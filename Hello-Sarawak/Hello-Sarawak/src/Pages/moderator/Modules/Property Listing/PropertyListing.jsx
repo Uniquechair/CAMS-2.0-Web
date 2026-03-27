@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { fetchPropertiesListingTable, updatePropertyStatus, deleteProperty, propertyListingAccept, propertyListingReject, fetchReservation } from '../../../../../Api/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ActionDropdown from '../../../../Component/ActionDropdown/ActionDropdown';
@@ -12,8 +12,49 @@ import Alert from '../../../../Component/Alert/Alert';
 import Loader from '../../../../Component/Loader/Loader';
 import Status from '../../../../Component/Status/Status';
 import { FaEye, FaEdit, FaTrash, FaCheck, FaTimes } from 'react-icons/fa';
+import { IoIosArrowBack, IoIosArrowForward } from "react-icons/io"; 
 import '../../../../Component/MainContent/MainContent.css';
 import '../Property Listing/PropertyListing.css';
+
+// BEAUTIFUL IMAGE SLIDER COMPONENT FOR THE MODAL
+const ImageCarousel = ({ images }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    if (!images || images.length === 0) return <span style={{ color: '#888' }}>No Image Available</span>;
+
+    const nextSlide = (e) => {
+        e.stopPropagation();
+        setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    };
+
+    const prevSlide = (e) => {
+        e.stopPropagation();
+        setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    };
+
+    return (
+        <div style={{ position: 'relative', width: '100%', height: '250px', borderRadius: '8px', overflow: 'hidden', marginBottom: '10px', backgroundColor: '#f0f0f0' }}>
+            <img
+                src={`data:image/jpeg;base64,${images[currentIndex]}`}
+                alt={`Slide ${currentIndex + 1}`}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+            {images.length > 1 && (
+                <>
+                    <button type="button" onClick={prevSlide} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', fontSize: '18px', color: '#333' }}>
+                        <IoIosArrowBack />
+                    </button>
+                    <button type="button" onClick={nextSlide} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', fontSize: '18px', color: '#333' }}>
+                        <IoIosArrowForward />
+                    </button>
+                    <div style={{ position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(0,0,0,0.8)', color: 'white', padding: '4px 12px', borderRadius: '15px', fontSize: '14px', fontWeight: 'bold', letterSpacing: '1px' }}>
+                        {currentIndex + 1} / {images.length}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
 
 const PropertyListing = () => {
     const [searchKey, setSearchKey] = useState('');
@@ -31,6 +72,7 @@ const PropertyListing = () => {
     const [pageSize, setPageSize] = useState(10);
     
     const queryClient = useQueryClient();
+    const toastTimerRef = useRef(null);
     
     const { data, isLoading, error } = useQuery({
         queryKey: ['properties', page, pageSize, appliedFilters],
@@ -50,19 +92,26 @@ const PropertyListing = () => {
     const properties = data?.properties || [];
     const totalCount = data?.totalCount || 0;
 
-    const displayToast = (type, message) => {
+    // STICKY TOAST LOGIC
+    const displayToast = (type, message, isSticky = false) => {
         setToastType(type);
         setToastMessage(message);
         setShowToast(true);
-        setTimeout(() => setShowToast(false), 5000);
+        
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current);
+            toastTimerRef.current = null;
+        }
+        
+        if (!isSticky) {
+            toastTimerRef.current = setTimeout(() => setShowToast(false), 5000);
+        }
     };
 
+    // Mutaions: We removed the instant "fake" overrides. It now fully waits for the database!
     const acceptMutation = useMutation({
         mutationFn: async (propertyId) => {
-            return updatePropertyStatus(propertyId, 'Pending');
-        },
-        onSuccess: (_, propertyId) => {
-            queryClient.invalidateQueries({ queryKey: ['properties'] });
+            return updatePropertyStatus(propertyId, 'Pending'); // Kept exactly as your original code
         },
         onError: (error) => {
             console.error('Failed to accept property', error);
@@ -74,9 +123,6 @@ const PropertyListing = () => {
             await propertyListingReject(propertyId);
             return updatePropertyStatus(propertyId, 'Unavailable');
         },
-        onSuccess: (_, propertyId) => {
-            queryClient.invalidateQueries({ queryKey: ['properties'] });
-        },
         onError: (error) => {
             console.error('Failed to reject property', error);
         }
@@ -85,10 +131,6 @@ const PropertyListing = () => {
     const deleteMutation = useMutation({
         mutationFn: async (propertyId) => {
             return deleteProperty(propertyId);
-        },
-        onSuccess: () => {
-            displayToast('success', 'Property deleted successfully');
-            queryClient.invalidateQueries({ queryKey: ['properties'] });
         },
         onError: (error) => {
             console.error('Failed to delete property', error);
@@ -103,7 +145,6 @@ const PropertyListing = () => {
         try {
             if (action === 'view') {
                 
-                // BEAUTIFUL DECODER FOR VIEW DETAILS (Works for both Admin and Moderator)
                 let rawDesc = property.propertydescription || 'N/A';
                 let finalDesc = rawDesc;
 
@@ -158,6 +199,7 @@ const PropertyListing = () => {
                 }
 
                 setSelectedProperty({
+                    galleryWidget: <ImageCarousel images={property.propertyimage || []} />,
                     propertyid: property.propertyid || 'N/A',
                     propertyname: property.propertyaddress || 'N/A',
                     clustername: property.clustername || 'N/A',
@@ -168,7 +210,6 @@ const PropertyListing = () => {
                     propertystatus: property.propertystatus || 'N/A',
                     propertybedtype: property.propertybedtype || 'N/A',
                     propertydescription: finalDesc, 
-                    images: property.propertyimage || [],
                     username: property.username || 'N/A',
                 });
             } else if (action === 'edit') {
@@ -178,14 +219,36 @@ const PropertyListing = () => {
                 }
                 setEditProperty({ ...property });
                 setIsPropertyFormOpen(true);
-            } else if (action === 'enable') {
-                displayToast('success', 'Processing request...');
+
+            // PERFECTLY SYNCED ACTIONS
+            } else if (action === 'accept') {
+                displayToast('success', 'Processing request...', true); 
                 await acceptMutation.mutateAsync(property.propertyid);
-                displayToast('success', 'Property Enabled Successfully');
-            } else if (action === 'disable') {
-                displayToast('success', 'Processing request...');
+                await new Promise(resolve => setTimeout(resolve, 800)); // Brief pause for visual smoothness
+                await queryClient.refetchQueries({ queryKey: ['properties'] }); // Waits for table to fetch new data
+                displayToast('success', 'Property Accepted Successfully');
+
+            } else if (action === 'reject') {
+                displayToast('success', 'Processing request...', true); 
                 await rejectMutation.mutateAsync(property.propertyid);
+                await new Promise(resolve => setTimeout(resolve, 800)); 
+                await queryClient.refetchQueries({ queryKey: ['properties'] }); 
+                displayToast('success', 'Property Rejected Successfully');
+
+            } else if (action === 'enable') {
+                displayToast('success', 'Processing request...', true); 
+                await acceptMutation.mutateAsync(property.propertyid);
+                await new Promise(resolve => setTimeout(resolve, 800)); 
+                await queryClient.refetchQueries({ queryKey: ['properties'] }); 
+                displayToast('success', 'Property Enabled Successfully');
+
+            } else if (action === 'disable') {
+                displayToast('success', 'Processing request...', true); 
+                await rejectMutation.mutateAsync(property.propertyid);
+                await new Promise(resolve => setTimeout(resolve, 800)); 
+                await queryClient.refetchQueries({ queryKey: ['properties'] }); 
                 displayToast('success', 'Property Disabled Successfully');
+
             } else if (action === 'delete') {
                 if (property.propertystatus === 'Unavailable' && property.username === username) {
                     setPropertyToDelete(property.propertyid);
@@ -232,8 +295,11 @@ const PropertyListing = () => {
                 return;
             }
 
-            displayToast('success', 'Processing deletion...');
+            displayToast('success', 'Processing request...', true); 
             await deleteMutation.mutateAsync(propertyToDelete);
+            await new Promise(resolve => setTimeout(resolve, 800)); 
+            await queryClient.refetchQueries({ queryKey: ['properties'] }); // Waits for table to fetch new data
+            displayToast('success', 'Property deleted successfully');
         } catch (error) {
             console.error('Failed to delete property:', error);
             displayToast('error', 'Failed to delete property. Please try again.');
@@ -263,6 +329,7 @@ const PropertyListing = () => {
     ];
 
     const displayLabels = {
+        galleryWidget: " ", 
         propertyid: "PID",
         propertyname: "Property Name",
         clustername: "Cluster Name",
@@ -273,7 +340,6 @@ const PropertyListing = () => {
         propertystatus: "Property Status",
         propertybedtype: "Bed Type",
         propertydescription: "Description",
-        images: "Images",
         username: "Operator Name"
     };
 
@@ -425,17 +491,30 @@ const PropertyListing = () => {
                     initialData={editProperty}
                     onSubmit={async () => {
                         setIsPropertyFormOpen(false);
-                        displayToast('success', 'Processing request...'); 
+                        
+                        displayToast('success', 'Processing request...', true); 
                         
                         try {
-                            await queryClient.invalidateQueries({ queryKey: ['properties'] });
-                            displayToast('success', editProperty ? 'Property updated successfully' : 'Property created successfully');
-                            
+                            await new Promise(resolve => setTimeout(resolve, 1500));
+
+                            const targetPage = editProperty ? page : 1;
                             if (!editProperty) {
                                 setPage(1); 
                             }
+                            
+                            await queryClient.fetchQuery({
+                                queryKey: ['properties', targetPage, pageSize, appliedFilters],
+                                queryFn: () => fetchPropertiesListingTable(targetPage, pageSize, appliedFilters.status !== 'All' ? appliedFilters.status : undefined)
+                            });
+                            
+                            await queryClient.invalidateQueries({ queryKey: ['properties'] });
+
+                            setTimeout(() => {
+                                displayToast('success', editProperty ? 'Property updated successfully' : 'Property created successfully');
+                            }, 300);
+                            
                         } catch (error) {
-                            displayToast('error', 'Failed to refresh properties.');
+                            displayToast('error', 'An error occurred while processing your request.');
                         }
                     }}
                     onClose={() => setIsPropertyFormOpen(false)}

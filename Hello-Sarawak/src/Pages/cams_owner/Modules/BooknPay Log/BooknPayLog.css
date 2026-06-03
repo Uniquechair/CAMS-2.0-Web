@@ -1,0 +1,49 @@
+.booklog-category-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: #eef2f7;
+  color: #475569;
+}
+
+.booklog-category-badge.deposit {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.booklog-category-badge.balance {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.booklog-category-badge.full-payment {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.booklog-category-badge.cancel {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.booklog-category-badge.expired {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.booklog-category-badge.other {
+  background: #f1f5f9;
+  color: #64748b;
+}
+.dashboard-page-description {
+  margin: 6px 0 0;
+  color: #5f7290;
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 780px;
+}

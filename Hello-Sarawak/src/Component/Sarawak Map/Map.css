@@ -1,0 +1,380 @@
+/* =========================
+   SARAWAK MAP MAIN LAYOUT
+   ========================= */
+
+.main-container-map {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 1280px;
+  height: auto;
+  position: relative;
+  gap: 48px;
+  margin: 0 auto;
+  padding: 0 32px 48px;
+}
+
+/* =========================
+   MAP SIDE
+   ========================= */
+
+.map-container_sarawak {
+  width: 58%;
+  max-width: 760px;
+}
+.sarawak-map-svg {
+  width: 100%;
+  max-width: 690px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  overflow: visible;
+  filter: none !important;
+}
+
+.map-background_sarawak {
+  width: 100%;
+  height: auto;
+}
+
+.map-overlay_sarawak {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* =========================
+   MAP REGION STYLE
+   ========================= */
+
+.map-sub_sarawak {
+  cursor: pointer;
+  pointer-events: all;
+  transition: all 0.35s ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.map-sub_sarawak:hover {
+  transform: scale(1.025) translateY(-3px);
+  filter: drop-shadow(0 12px 18px rgba(73, 56, 41, 0.28));
+  z-index: 100;
+}
+
+.region-path {
+  fill: transparent !important;
+  stroke: #493829 !important;
+  stroke-width: 1.45px !important;
+  transition: fill 0.25s ease, stroke 0.25s ease, stroke-width 0.25s ease;
+}
+
+.map-sub_sarawak:hover .region-path,
+.region-path.selected,
+.region-path.active,
+.map-sub_sarawak .fill-\[\#C4956A\] {
+  fill: #C4956A !important;
+  stroke: #ffffff !important;
+  stroke-width: 2.35px !important;
+}
+
+.map-sub_sarawak circle:not(.pin-hit-area) {
+  fill: #C4956A !important;
+  stroke: #493829 !important;
+  stroke-width: 2px !important;
+  filter: none !important;
+}
+
+.map-sub_sarawak:hover circle:not(.pin-hit-area),
+.map-sub_sarawak circle[fill="#493829"] {
+  fill: #493829 !important;
+  stroke: #ffffff !important;
+  stroke-width: 3px !important;
+}
+
+.pin-hit-area {
+  fill: transparent !important;
+  stroke: none !important;
+  pointer-events: all;
+}
+
+.map-sub_sarawak text {
+  fill: #493829 !important;
+  font-size: 15px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
+/* =========================
+   SIDE CARD - uploaded card style
+   ========================= */
+
+.map-card-container {
+  width: 38%;
+  max-width: 420px;
+  position: relative;
+  z-index: 20;
+  overflow: visible;
+}
+
+.info_card_map_sarawak {
+  width: 100%;
+  padding: 18px;
+  background-color: #ffffff;
+  box-shadow: 0 8px 32px rgba(73, 56, 41, 0.12), 0 2px 8px rgba(0,0,0,0.06);
+  border-radius: 20px;
+  margin-left: 0;
+  border: 1px solid #E8E1D9;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.info_card_map_sarawak:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(73, 56, 41, 0.18);
+}
+
+.info_card_map_sarawak img {
+  border-radius: 12px;
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  display: block;
+}
+
+.info_card_map_sarawak h2 {
+  margin-top: 25px;
+  margin-bottom: 0;
+  font-size: 1.8rem;
+  color: #493829;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.info_card_map_sarawak p {
+  margin-top: 15px;
+  margin-bottom: 0;
+  font-size: 1rem;
+  color: #7A6555;
+  line-height: 1.55;
+}
+
+/* =========================
+   CARD BUTTON - force hover colour
+   ========================= */
+
+.map-action-button-container {
+  margin-top: 22px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.info_card_map_sarawak button,
+.info_card_map_sarawak .sarawak-tab-btn,
+.info_card_map_sarawak .map-side-card-button {
+  background-color: #ffffff !important;
+  color: #C4956A !important;
+  border: 2px solid #C4956A !important;
+  border-radius: 10px !important;
+  padding: 12px 26px !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 0.25s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 48px !important;
+  font-family: inherit !important;
+  box-shadow: none !important;
+}
+
+.info_card_map_sarawak button:hover,
+.info_card_map_sarawak .sarawak-tab-btn:hover,
+.info_card_map_sarawak .map-side-card-button:hover,
+.info_card_map_sarawak .sarawak-tab-btn.active-btn:hover {
+  background-color: #C4956A !important;
+  color: #ffffff !important;
+  border-color: #C4956A !important;
+  box-shadow: 0 8px 18px rgba(196, 149, 106, 0.28) !important;
+  transform: translateY(-2px) !important;
+}
+
+.info_card_map_sarawak button:disabled,
+.info_card_map_sarawak .sarawak-tab-btn.static-btn {
+  background-color: #ffffff !important;
+  color: #C4956A !important;
+  border: 2px solid #C4956A !important;
+  cursor: default !important;
+}
+
+.info_card_map_sarawak button:disabled:hover,
+.info_card_map_sarawak .sarawak-tab-btn.static-btn:hover {
+  background-color: #ffffff !important;
+  color: #C4956A !important;
+  border-color: #C4956A !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* =========================
+   TOOLTIP
+   ========================= */
+
+.main-container-map .fixed.pointer-events-none {
+  z-index: 9999 !important;
+}
+
+/* =========================
+   ANIMATION
+   ========================= */
+
+@keyframes fadeInSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.info_card_map_sarawak.card-animate {
+  animation: fadeInSlideUp 0.45s ease-in-out;
+}
+
+/* =========================
+   RESPONSIVE
+   ========================= */
+
+@media screen and (max-width: 1024px) {
+  .main-container-map {
+    gap: 24px;
+    padding: 0 18px 32px;
+  }
+
+  .map-container_sarawak {
+    width: 54%;
+  }
+
+  .map-card-container {
+    width: 46%;
+  }
+
+  .sarawak-map-svg {
+    max-width: 650px;
+  }
+
+  .info_card_map_sarawak img {
+    height: 220px;
+  }
+
+  .info_card_map_sarawak h2 {
+    font-size: 1.55rem;
+  }
+
+  .info_card_map_sarawak p {
+    font-size: 0.92rem;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .main-container-map {
+    flex-direction: column;
+    align-items: center;
+    height: auto;
+    padding: 20px 10px 32px;
+  }
+
+  .map-container_sarawak,
+  .map-card-container {
+    width: 90%;
+    max-width: 650px;
+  }
+
+  .sarawak-map-svg {
+    max-width: 650px;
+  }
+
+  .info_card_map_sarawak {
+    width: 100%;
+    margin: 0 auto;
+    padding: 15px;
+  }
+
+  .info_card_map_sarawak img {
+    height: 230px;
+  }
+
+  .info_card_map_sarawak h2 {
+    margin-top: 15px;
+    font-size: 1.5rem;
+  }
+
+  .info_card_map_sarawak p {
+    margin-top: 12px;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .main-container-map {
+    padding: 15px 5px 28px;
+  }
+
+  .map-container_sarawak,
+  .map-card-container {
+    width: 95%;
+  }
+
+  .sarawak-map-svg {
+    max-width: 100%;
+  }
+
+  .map-sub_sarawak text {
+    font-size: 13px;
+  }
+
+  .info_card_map_sarawak {
+    padding: 12px;
+    margin: 0 auto 70px;
+  }
+
+  .info_card_map_sarawak img {
+    height: 190px;
+  }
+
+  .info_card_map_sarawak h2 {
+    font-size: 1.2rem;
+    margin-top: 12px;
+  }
+
+  .info_card_map_sarawak p {
+    font-size: 0.82rem;
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+
+  .info_card_map_sarawak button,
+  .info_card_map_sarawak .sarawak-tab-btn,
+  .info_card_map_sarawak .map-side-card-button {
+    width: 100% !important;
+    padding: 12px 16px !important;
+  }
+}
+
+.map-pins-layer {
+  pointer-events: none;
+}
+
+.map-fixed-pin {
+  transition: all 0.25s ease;
+  filter: drop-shadow(0 2px 4px rgba(73, 56, 41, 0.25));
+}
+

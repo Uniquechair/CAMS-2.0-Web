@@ -1,0 +1,524 @@
+.holiday-manager-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.hm-header {
+  margin-bottom: 24px;
+}
+
+.hm-header h2 {
+  margin: 0 0 8px 0;
+  color: #2c3e50;
+  font-size: 22px;
+}
+
+.hm-header p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.hm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.hm-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.hm-card h3 {
+  margin: 0 0 8px 0;
+  color: #1a202c;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+}
+
+.hm-help-text {
+  color: #718096;
+  font-size: 13px;
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+.hm-subheading {
+  font-size: 14px;
+  margin-bottom: 10px;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+/* Upload Button styling */
+.hm-upload-box {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.hm-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #ebf8ff;
+  color: #3182ce;
+  border: 1px solid #bee3f8;
+  padding: 12px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  width: 100%;
+  transition: all 0.2s ease;
+}
+
+.hm-upload-btn:hover {
+  background-color: #bee3f8;
+  transform: translateY(-1px);
+}
+
+/* Forms */
+.hm-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.hm-form-column {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.hm-date-row {
+  display: flex;
+  gap: 15px;
+}
+
+.hm-date-input {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hm-date-input label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.hm-card input {
+  padding: 10px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  outline: none;
+  font-family: inherit;
+  flex: 1;
+  transition: all 0.2s;
+}
+
+.hm-card input:focus {
+  border-color: #3182ce;
+  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+}
+
+.hm-add-btn {
+  background-color: #38a169;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.2s;
+}
+
+.hm-add-btn:hover {
+  background-color: #2f855a;
+}
+
+/* Header with Delete All */
+.hm-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 25px;
+  margin-bottom: 10px;
+  padding-top: 15px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.hm-text-danger-btn {
+  background: none;
+  border: none;
+  color: #e53e3e;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.hm-text-danger-btn:hover {
+  background-color: #fff5f5;
+}
+
+/* Beautiful List Items */
+.hm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 450px;
+  overflow-y: auto;
+  padding-right: 5px;
+  margin-bottom: 20px;
+}
+
+.hm-list::-webkit-scrollbar {
+  width: 6px;
+}
+.hm-list::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.hm-empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  background-color: #f7fafc;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e0;
+}
+
+.hm-empty-state p {
+  color: #718096;
+  margin: 0;
+  font-size: 14px;
+}
+
+.hm-empty {
+  text-align: center;
+  color: #a0aec0;
+  font-style: italic;
+  font-size: 14px;
+  padding: 10px 0;
+}
+
+.hm-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: all 0.2s;
+}
+
+.hm-list-item:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.hm-list-item.active {
+  border-left: 4px solid #38a169;
+}
+
+.hm-list-item.inactive {
+  border-left: 4px solid #a0aec0;
+  background-color: #f7fafc;
+  opacity: 0.8;
+}
+
+.hm-item-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* The New Calendar Date UI */
+.hm-date-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 55px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.active-block { background-color: #f0fff4; color: #38a169; }
+.inactive-block { background-color: #edf2f7; color: #718096; }
+.festive-block { background-color: #ebf8ff; color: #3182ce; }
+
+.hm-date-block .hm-day {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.hm-date-block .hm-month {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.hm-event-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hm-event-details strong {
+  color: #2d3748;
+  font-size: 15px;
+}
+
+.hm-event-details span {
+  color: #718096;
+  font-size: 13px;
+}
+
+.hm-range-text {
+  background-color: #edf2f7;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.hm-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hm-delete-btn {
+  background: none;
+  border: none;
+  color: #e53e3e;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hm-delete-btn:hover {
+  background-color: #fff5f5;
+  transform: scale(1.1);
+}
+
+/* Custom Toggle Switch */
+.dp-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.dp-switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.dp-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e0;
+  transition: .3s;
+}
+
+.dp-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+input:checked + .dp-slider {
+  background-color: #38a169;
+}
+
+input:checked + .dp-slider:before {
+  transform: translateX(20px);
+}
+
+.dp-slider.round {
+  border-radius: 24px;
+}
+
+.dp-slider.round:before {
+  border-radius: 50%;
+}
+
+@media (max-width: 768px) {
+  .hm-grid {
+    grid-template-columns: 1fr;
+  }
+  .hm-form {
+    flex-direction: column;
+  }
+  .hm-item-content {
+      gap: 10px;
+  }
+}
+
+/* NEW: Individual Pricing Rate Box Styles */
+.hm-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.hm-list-item {
+  display: flex;
+  flex-direction: column; /* Changed to column to support the drop-down rate box */
+  gap: 12px;
+  padding: 16px;
+}
+
+.hm-custom-rate-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+  background-color: transparent;
+  animation: slideDown 0.3s ease-out forwards;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hm-rate-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #38a169;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hm-rate-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100px;
+}
+
+.hm-rate-input-wrapper input {
+  width: 100%;
+  padding: 8px 24px 8px 12px !important; /* Override generic input padding */
+  font-size: 14px !important;
+  font-weight: 700;
+  color: #2d3748;
+  border: 1px solid #68d391 !important; /* Green border for holiday rate */
+  border-radius: 6px !important;
+  text-align: right;
+  transition: all 0.2s;
+}
+
+.hm-rate-input-wrapper input:focus {
+  border-color: #38a169 !important;
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.15) !important;
+}
+
+.outline-blue input {
+  border: 1px solid #63b3ed !important; /* Blue border for festive rate */
+}
+
+.outline-blue input:focus {
+  border-color: #3182ce !important;
+  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.15) !important;
+}
+
+.hm-rate-suffix {
+  position: absolute;
+  right: 10px;
+  color: #a0aec0;
+  font-weight: 700;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* NEW: Global Rate Master Control Styles */
+.hm-global-rate-control {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f0fff4; /* Soft green background */
+  border: 1px dashed #68d391;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  transition: all 0.3s ease;
+}
+
+.hm-global-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hm-apply-all-btn {
+  background-color: #38a169;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 38px;
+}
+
+.hm-apply-all-btn:hover {
+  background-color: #2f855a;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.hm-apply-all-btn:active {
+  transform: translateY(0);
+}

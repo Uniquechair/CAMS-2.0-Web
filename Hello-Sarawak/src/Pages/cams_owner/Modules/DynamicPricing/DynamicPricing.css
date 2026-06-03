@@ -1,0 +1,243 @@
+.dynamic-pricing-page {
+  padding: 24px;
+  max-width: 1000px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.dp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 20px;
+}
+.dp-header .dashboard-page-title {
+  font-weight: 600;
+}
+
+.dp-header .dashboard-page-description {
+  font-weight: 400;
+}
+
+.dp-save-btn {
+  background-color: #3182ce;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(49, 130, 206, 0.2);
+}
+
+.dp-save-btn:hover {
+  background-color: #2b6cb0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(49, 130, 206, 0.3);
+}
+
+.dp-save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.dp-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+}
+
+.dp-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e0;
+}
+
+.dp-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dp-card-header-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.dp-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 18px;
+}
+
+.blue-icon { background-color: #ebf8ff; color: #3182ce; }
+.purple-icon { background-color: #faf5ff; color: #805ad5; }
+.green-icon { background-color: #f0fff4; color: #38a169; }
+.orange-icon { background-color: #fffaf0; color: #dd6b20; }
+
+.dp-label {
+  font-weight: 700;
+  color: #2d3748;
+  font-size: 16px;
+  margin: 0;
+}
+
+/* NEW Input Wrapper with Percentage Symbol */
+.dp-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.dp-input {
+  width: 100%;
+  padding: 14px 40px 14px 16px; /* Extra padding on right for the % symbol */
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  outline: none;
+  background-color: #fff;
+  transition: all 0.2s;
+}
+
+.dp-input-suffix {
+  position: absolute;
+  right: 16px;
+  color: #a0aec0;
+  font-weight: 700;
+  font-size: 16px;
+  pointer-events: none; /* Prevents symbol from blocking clicks */
+}
+
+/* Green borders for discounts */
+.outline-green .dp-input {
+  border: 1px solid #68d391;
+}
+
+.dp-input:focus {
+  border-color: #3182ce;
+  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.15);
+}
+
+.outline-green .dp-input:focus {
+  border-color: #38a169;
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.15);
+}
+
+/* Disabled styling */
+.disabled-wrapper .dp-input {
+  background-color: #f7fafc;
+  border-color: #e2e8f0;
+  color: #a0aec0;
+}
+.disabled-wrapper .dp-input-suffix {
+  color: #cbd5e0;
+}
+
+.dp-help-text {
+  font-size: 13px;
+  margin-top: 14px;
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.grey-text { color: #718096; }
+.green-text { color: #38a169; }
+
+/* The Toggle Switch CSS */
+.dp-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dp-toggle-text {
+  font-size: 14px;
+  color: #4a5568;
+  font-weight: 600;
+}
+
+.dp-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.dp-switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.dp-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e0;
+  transition: .3s;
+}
+
+.dp-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+input:checked + .dp-slider {
+  background-color: #805ad5; /* Purple to match the special event icon */
+}
+
+input:checked + .dp-slider:before {
+  transform: translateX(20px);
+}
+
+.dp-slider.round {
+  border-radius: 24px;
+}
+
+.dp-slider.round:before {
+  border-radius: 50%;
+}
+
+@media (max-width: 768px) {
+  .dp-grid {
+    grid-template-columns: 1fr;
+  }
+}

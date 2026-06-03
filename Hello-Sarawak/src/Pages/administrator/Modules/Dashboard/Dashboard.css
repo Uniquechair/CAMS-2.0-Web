@@ -1,0 +1,231 @@
+.notification_icon {
+    font-size: 25px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #000000;
+    background: #eaeaea;
+  }
+  
+  .notification_icon:hover {
+    color: #007bff;
+  }
+  
+  .notification-container {
+    position: relative;
+    display: inline-block;
+  }
+  
+  .notification-overlay {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 750px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    border: 1px solid #e0e0e0;
+    z-index: 1000;
+    margin-top: 8px;
+    animation: slideDown 0.2s ease-out;
+    max-height: 600px;
+  }
+  
+  @keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+  }
+  
+  .notification-content {
+    padding: 0;
+  }
+  
+  .notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #f0f0f0;
+    background-color: #f8f9fa;
+    border-radius: 8px 8px 0 0;
+  }
+  
+  .notification-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+  }
+  
+  .pickup-table-container {
+    padding: 0 16px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .pickup-table-container table {
+    width: 100%;
+    font-size: 14px;
+  }
+  
+  .pickup-table-container th {
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px 8px;
+  }
+  
+  .pickup-table-container td {
+    padding: 10px 8px;
+  }
+  
+  .date-cell {
+    font-size: 13px;
+    color: #555;
+    font-weight: 500;
+  }
+  
+  .notification-badge {
+    position: relative;
+    display: inline-block;
+  }
+  
+  .badge-count {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background-color: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid white;
+  }
+  
+  .overlay-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+    background: transparent;
+  }
+  
+  .property-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .property-table-image {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+  
+  .property-name {
+    font-weight: 500;
+  }
+
+  /* Booking Alert Notification Popup */
+.navbar-notification-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.navbar-notification-card {
+  background: #ffffff;
+  border: 1px solid #ead7bf;
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: 0.2s ease;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
+}
+
+.navbar-notification-card:hover {
+  background: #fff8f1;
+  transform: translateY(-1px);
+}
+
+.navbar-notification-card.unread {
+  border-left: 5px solid #8b5e34;
+  background: #fffaf5;
+}
+
+.navbar-notification-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.navbar-notification-top strong {
+  color: #2f241d;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.navbar-notification-top span {
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #f3eee8;
+  color: #6b3f1d;
+  white-space: nowrap;
+}
+
+.navbar-notification-card.unread .navbar-notification-top span {
+  background: #8b5e34;
+  color: #ffffff;
+}
+
+.navbar-notification-card p {
+  color: #4b5563;
+  font-size: 14px;
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.navbar-notification-card small {
+  color: #8b5e34;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.navbar-notification-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.navbar-notification-list::-webkit-scrollbar-track {
+  background: #f8f1e8;
+  border-radius: 999px;
+}
+
+.navbar-notification-list::-webkit-scrollbar-thumb {
+  background: #c8a27a;
+  border-radius: 999px;
+}
+
+.navbar-notification-list::-webkit-scrollbar-thumb:hover {
+  background: #8b5e34;
+}
+  
+  

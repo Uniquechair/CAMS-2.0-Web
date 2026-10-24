@@ -861,28 +861,47 @@ export const createReservation = async (reservationData) => {
 
 // Fetch all Reservations
 export const fetchReservation = async () => {
-  const username = localStorage.getItem('username');
-  
+  const username =
+    localStorage.getItem('username');
+
   try {
     if (!username) {
-      throw new Error('Username is not found in localStorage. Please log in.');
+      throw new Error(
+        'Username is not found in localStorage. Please log in.'
+      );
     }
 
-const response = await authFetch(`${API_URL}/reservationTable?username=${encodeURIComponent(username)}`, {
-  method: 'GET',
-});
+    const response = await authFetch(
+      `${API_URL}/reservationTable?username=${encodeURIComponent(
+        username
+      )}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+      }
+    );
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `API error: ${response.status} ${response.statusText}`
+      );
     }
 
-    const data = await response.json();
+    const data =
+      await response.json();
+
     return data.reservations;
   } catch (error) {
-    console.error('API error:', error);
+    console.error(
+      'API error:',
+      error
+    );
+
     throw error;
   }
 };
+
+
 
 // Update reservation status
 export const updateReservationStatus = async (
@@ -944,6 +963,113 @@ export const updateReservationStatus = async (
   }
 };
 
+
+// Manual Restock / Refund Reservation
+export const restockReservation = async (
+  reservationid,
+  refundAmount = 0
+) => {
+  const creatorid =
+    localStorage.getItem('userid') ||
+    localStorage.getItem('userId') ||
+    '';
+
+  const creatorUsername =
+    localStorage.getItem('username') ||
+    '';
+
+  const userGroup =
+    localStorage.getItem('userGroup') ||
+    localStorage.getItem('usergroup') ||
+    '';
+
+  if (!reservationid) {
+    throw new Error(
+      'Reservation ID is required.'
+    );
+  }
+
+  const numericRefund =
+    Number(refundAmount);
+
+  if (
+    !Number.isFinite(numericRefund) ||
+    numericRefund < 0
+  ) {
+    throw new Error(
+      'Refund amount must be RM 0.00 or greater.'
+    );
+  }
+
+  const query = new URLSearchParams();
+
+  if (creatorid) {
+    query.append(
+      'creatorid',
+      creatorid
+    );
+  }
+
+  if (creatorUsername) {
+    query.append(
+      'creatorUsername',
+      creatorUsername
+    );
+  }
+
+  if (userGroup) {
+    query.append(
+      'usergroup',
+      userGroup
+    );
+  }
+
+  try {
+    const response = await authFetch(
+      `${API_URL}/restockReservation/${encodeURIComponent(
+        reservationid
+      )}?${query.toString()}`,
+      {
+        method: 'PATCH',
+
+        headers: {
+          'Content-Type': 'application/json',
+        },
+
+        body: JSON.stringify({
+          refundAmount: numericRefund
+        }),
+      }
+    );
+
+    const data =
+      await response
+        .json()
+        .catch(() => ({}));
+
+    if (
+      !response.ok ||
+      data.success === false
+    ) {
+      throw new Error(
+        data.message ||
+        data.error ||
+        `Failed to restock reservation (${response.status})`
+      );
+    }
+
+    return data;
+
+  } catch (error) {
+    console.error(
+      'Restock reservation API error:',
+      error
+    );
+
+    throw error;
+  }
+};
+
 // Cart
 export const fetchCart = async () => {
   const userid =
@@ -958,7 +1084,8 @@ export const fetchCart = async () => {
     const response = await authFetch(
       `${API_URL}/cart?userid=${encodeURIComponent(userid)}`,
       {
-        method: 'GET',
+         method: 'GET',
+    cache: 'no-store',
       }
     );
 
@@ -1061,8 +1188,9 @@ export const fetchBookLog = async (userid) => {
 const response = await authFetch(
   `${API_URL}/users/booklog?userid=${encodeURIComponent(userid)}&usergroup=${encodeURIComponent(usergroup)}`,
   {
-    method: 'GET',
-  }
+  method: 'GET',
+  cache: 'no-store',
+}
 );
 
     if (!response.ok) {
@@ -1372,13 +1500,45 @@ export const googleLogin = async (token) => {
 
 // Google Map
 export const getCoordinates = async (location) => {
-  const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&key=AIzaSyCe27HezKpItahXjMFcWXf3LwFcjI7pZFk`);
-  const data = await response.json();
-  if (data.results && data.results.length > 0) {
-    const { lat, lng } = data.results[0].geometry.location;
-    return { lat, lng };
+  if (!location) {
+    throw new Error('Location is required');
   }
-  throw new Error('Location not found');
+
+  if (
+    !window.google ||
+    !window.google.maps ||
+    !window.google.maps.Geocoder
+  ) {
+    throw new Error('Google Maps is not loaded yet');
+  }
+
+  const geocoder = new window.google.maps.Geocoder();
+
+  try {
+    const response = await geocoder.geocode({
+      address: location
+    });
+
+    if (
+      response.results &&
+      response.results.length > 0
+    ) {
+      const position =
+        response.results[0].geometry.location;
+
+      return {
+        lat: position.lat(),
+        lng: position.lng()
+      };
+    }
+
+    throw new Error('Location not found');
+  } catch (error) {
+    console.error('Google Geocoding error:', error);
+    throw new Error(
+      error?.message || 'Location not found'
+    );
+  }
 };
 
 // Assign Role
@@ -1410,24 +1570,43 @@ export const assignRole = async (userid, role) => {
   return data;
 };
 
+
 // Fetch Audit Trails
 export const auditTrails = async (userid) => {
   try {
-const response = await authFetch(`${API_URL}/auditTrails?userid=${encodeURIComponent(userid)}`, {
-  method: 'GET',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-    if(!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to fetch audit trails');
+    const response = await authFetch(
+      `${API_URL}/auditTrails?userid=${encodeURIComponent(userid)}`,
+      {
+        method: 'GET',
+
+        cache: 'no-store',
+
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorData =
+        await response.json();
+
+      throw new Error(
+        errorData.message ||
+        'Failed to fetch audit trails'
+      );
     }
 
-    const data = await response.json();
+    const data =
+      await response.json();
+
     return data.auditTrails;
-  }catch (error) {
-    console.error('API error: ', error);
+  } catch (error) {
+    console.error(
+      'API error: ',
+      error
+    );
+
     throw error;
   }
 };
@@ -2304,3 +2483,4 @@ export const replyFaqQuestionEmail = async (questionId, payload) => {
 
   return data;
 };
+

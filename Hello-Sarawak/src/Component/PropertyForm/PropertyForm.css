@@ -911,3 +911,12 @@ input:checked + .property-form-slider:before {
         grid-template-columns: 1fr;
     }
 }
+
+gmp-place-autocomplete {
+    width: 100%;
+    color-scheme: light;
+    background-color: #ffffff;
+    color: #1f2937;
+    border: 1px solid #d9e0ea;
+    border-radius: 10px;
+}

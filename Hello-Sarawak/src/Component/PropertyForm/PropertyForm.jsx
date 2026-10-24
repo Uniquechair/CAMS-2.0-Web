@@ -88,7 +88,11 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
         { name: "Free Parking", icon: <FaParking />, category: "features" },
         { name: "Swimming Pool", icon: <FaSwimmingPool />, category: "features" },
         { name: "Bathtub", icon: <FaBath />, category: "features" },
-        { name: "Shower", icon: <FaShower className="facilities-icon"/> },
+        {
+    name: "Shower",
+    icon: <FaShower className="facilities-icon" />,
+    category: "features"
+},
         { name: "EV charger", icon: <FaChargingStation />, category: "features" },
         { name: "Baby Crib", icon: <FaBabyCarriage />, category: "features" },
         { name: "King bed", icon: <MdOutlineKingBed />, category: "features" },
@@ -156,7 +160,8 @@ const PropertyForm = ({ initialData, onSubmit, onClose }) => {
     const [selectedFacilities, setSelectedFacilities] = useState([]);
     const fileInputRef = useRef(null);
 const locationInputRef = useRef(null);
-const hasInitialized = useRef(false); // ← ADD THIS
+const placeAutocompleteRef = useRef(null);
+const hasInitialized = useRef(false);
     const [showMoreAmenities, setShowMoreAmenities] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
@@ -349,33 +354,149 @@ const storedBasePrice = storedFinalPrice / (1 + dynamicCommissionRate);
         }
     }, [userData, clustersData, initialData]);
 
-    useEffect(() => {
-        if (window.google && locationInputRef.current) {
-            const autocomplete = new window.google.maps.places.Autocomplete(locationInputRef.current);
-            autocomplete.addListener('place_changed', () => {
-                const place = autocomplete.getPlace();
-                
-                if (place) {
-                    let finalLocation = place.formatted_address || "";
-                    if (place.name && finalLocation && !finalLocation.includes(place.name)) {
-                        finalLocation = `${place.name}, ${finalLocation}`;
-                    } else if (place.name && !finalLocation) {
-                        finalLocation = place.name;
+   useEffect(() => {
+    let isCancelled = false;
+
+    const initializePlaceAutocomplete = async () => {
+        try {
+            if (
+                !window.google ||
+                !window.google.maps ||
+                !window.google.maps.importLibrary
+            ) {
+                console.error("Google Maps is not loaded.");
+                return;
+            }
+
+            if (!locationInputRef.current) {
+                return;
+            }
+
+            const { PlaceAutocompleteElement } =
+                await window.google.maps.importLibrary("places");
+
+            if (isCancelled) return;
+
+            const placeAutocomplete =
+                new PlaceAutocompleteElement();
+
+            // Restrict search to Malaysia
+            placeAutocomplete.includedRegionCodes = ["my"];
+
+            placeAutocomplete.placeholder =
+                "e.g. No.123, Jalan ABC";
+
+            // When editing an existing property,
+            // display the previously saved address
+            placeAutocomplete.value =
+                initialData?.nearbylocation || "";
+
+            // Make it fill the form width
+            placeAutocomplete.style.width = "100%";
+
+            
+
+            // Save reference
+            placeAutocompleteRef.current =
+                placeAutocomplete;
+
+            // Clear old element if the form is reopened
+            locationInputRef.current.innerHTML = "";
+
+            locationInputRef.current.appendChild(
+                placeAutocomplete
+            );
+
+            placeAutocomplete.addEventListener(
+                "gmp-select",
+                async (event) => {
+                    try {
+                        const place =
+                            event.placePrediction.toPlace();
+
+                        await place.fetchFields({
+                            fields: [
+                                "displayName",
+                                "formattedAddress",
+                                "location"
+                            ]
+                        });
+
+                        let finalLocation =
+                            place.formattedAddress || "";
+
+                        if (
+                            place.displayName &&
+                            finalLocation &&
+                            !finalLocation.includes(
+                                place.displayName
+                            )
+                        ) {
+                            finalLocation =
+                                `${place.displayName}, ${finalLocation}`;
+                        } else if (
+                            place.displayName &&
+                            !finalLocation
+                        ) {
+                            finalLocation =
+                                place.displayName;
+                        }
+
+                        const lat =
+                            place.location?.lat() ?? "";
+
+                        const lng =
+                            place.location?.lng() ?? "";
+
+                        setFormData((prev) => ({
+                            ...prev,
+                            nearbyLocation: finalLocation,
+                            latitude: lat,
+                            longitude: lng
+                        }));
+
+                        // Keep selected address visible
+                        placeAutocomplete.value =
+                            finalLocation;
+
+                    } catch (error) {
+                        console.error(
+                            "Google place selection error:",
+                            error
+                        );
                     }
-
-                    const lat = place.geometry?.location?.lat() || "";
-                    const lng = place.geometry?.location?.lng() || "";
-
-                    setFormData((prev) => ({ 
-                        ...prev, 
-                        nearbyLocation: finalLocation,
-                        latitude: lat,
-                        longitude: lng
-                    }));
                 }
-            });
+            );
+
+            placeAutocomplete.addEventListener(
+                "gmp-error",
+                () => {
+                    console.error(
+                        "Google Places request failed. Check API key, Places API (New), billing and restrictions."
+                    );
+                }
+            );
+
+        } catch (error) {
+            console.error(
+                "Failed to initialize Google Places:",
+                error
+            );
         }
-    }, []);
+    };
+
+    initializePlaceAutocomplete();
+
+    return () => {
+        isCancelled = true;
+
+        if (locationInputRef.current) {
+            locationInputRef.current.innerHTML = "";
+        }
+
+        placeAutocompleteRef.current = null;
+    };
+}, [initialData]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -491,26 +612,105 @@ const storedBasePrice = storedFinalPrice / (1 + dynamicCommissionRate);
         }));
     };
 
-    const toggleFacility = (facilityName) => {
-        setSelectedFacilities((prev) => {
-            if (facilityName === "Smoking allowed") {
-                return prev.includes("No Smoking") ? prev.filter(name => name !== "No Smoking").concat(facilityName) : prev.includes(facilityName) ? prev.filter(name => name !== facilityName) : [...prev, facilityName];
-            } else if (facilityName === "No Smoking") {
-                return prev.includes("Smoking allowed") ? prev.filter(name => name !== "Smoking allowed").concat(facilityName) : prev.includes(facilityName) ? prev.filter(name => name !== facilityName) : [...prev, facilityName];
+  const toggleFacility = (facilityName) => {
+    setSelectedFacilities((prev) => {
+        let updatedFacilities;
+
+        if (facilityName === "Smoking allowed") {
+            if (prev.includes("Smoking allowed")) {
+                updatedFacilities = prev.filter(
+                    name => name !== "Smoking allowed"
+                );
+            } else {
+                updatedFacilities = prev
+                    .filter(name => name !== "No Smoking")
+                    .concat("Smoking allowed");
             }
-            if (facilityName === "Pets Allowed") {
-                return prev.includes("No Pets") ? prev.filter(name => name !== "No Pets").concat(facilityName) : prev.includes(facilityName) ? prev.filter(name => name !== facilityName) : [...prev, facilityName];
-            } else if (facilityName === "No Pets") {
-                return prev.includes("Pets Allowed") ? prev.filter(name => name !== "Pets Allowed").concat(facilityName) : prev.includes(facilityName) ? prev.filter(name => name !== facilityName) : [...prev, facilityName];
+        }
+
+        else if (facilityName === "No Smoking") {
+            if (prev.includes("No Smoking")) {
+                updatedFacilities = prev.filter(
+                    name => name !== "No Smoking"
+                );
+            } else {
+                updatedFacilities = prev
+                    .filter(name => name !== "Smoking allowed")
+                    .concat("No Smoking");
             }
-            return prev.includes(facilityName) ? prev.filter((name) => name !== facilityName) : [...prev, facilityName];
-        });
-    };
+        }
+
+        else if (facilityName === "Pets Allowed") {
+            if (prev.includes("Pets Allowed")) {
+                updatedFacilities = prev.filter(
+                    name => name !== "Pets Allowed"
+                );
+            } else {
+                updatedFacilities = prev
+                    .filter(name => name !== "No Pets")
+                    .concat("Pets Allowed");
+            }
+        }
+
+        else if (facilityName === "No Pets") {
+            if (prev.includes("No Pets")) {
+                updatedFacilities = prev.filter(
+                    name => name !== "No Pets"
+                );
+            } else {
+                updatedFacilities = prev
+                    .filter(name => name !== "Pets Allowed")
+                    .concat("No Pets");
+            }
+        }
+
+        else {
+            updatedFacilities =
+                prev.includes(facilityName)
+                    ? prev.filter(
+                        name => name !== facilityName
+                    )
+                    : [...prev, facilityName];
+        }
+
+        setFormData((oldData) => ({
+            ...oldData,
+            facilities: updatedFacilities
+        }));
+
+        return updatedFacilities;
+    });
+};
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        
-        if (formData.propertyImage.length < 4) {
+    e.preventDefault();
+
+    // Google location is compulsory only for NEW properties.
+    if (
+        !initialData &&
+        !formData.nearbyLocation
+    ) {
+        setToastMessage(
+            "Please select a valid address from the Google suggestions."
+        );
+        setToastType("error");
+        setShowToast(true);
+        return;
+    }
+
+    if (
+        !initialData &&
+        (!formData.latitude || !formData.longitude)
+    ) {
+        setToastMessage(
+            "Please select a valid address from the Google suggestions."
+        );
+        setToastType("error");
+        setShowToast(true);
+        return;
+    }
+
+    if (formData.propertyImage.length < 4) {
             setToastMessage("Please upload at least 4 main property images."); setToastType("error"); setShowToast(true); return;
         }
 
@@ -714,9 +914,16 @@ if (response && response.message) {
             daysBeforePayingUnit: "days"
         });
         setRooms([{ id: Date.now(), name: '', maxGuests: '', bedType: '', price: '', quantity: '1', description: '', images: [], options: [] }]);
-        setRemovedImages([]);
-        setSelectedFacilities([]);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+       setRemovedImages([]);
+setSelectedFacilities([]);
+
+if (fileInputRef.current) {
+    fileInputRef.current.value = "";
+}
+
+if (placeAutocompleteRef.current) {
+    placeAutocompleteRef.current.value = "";
+}
     };
 
     const imageInfoText = formData.propertyImage.length > 0 ? "The first image will be the main display image." : "";
@@ -762,9 +969,34 @@ if (response && response.message) {
                                 </select>
                             </div>
                             <div className="property-form-group">
-                                <label>Exact Location / Address:</label>
-                                <input type="text" name="nearbyLocation" value={formData.nearbyLocation} onChange={handleChange} placeholder="e.g. No.123, Jalan ABC" required ref={locationInputRef} />
-                            </div>
+    <label>Exact Location / Address:</label>
+
+    <div
+        ref={locationInputRef}
+        style={{
+            width: "100%",
+            minHeight: "42px"
+        }}
+    />
+
+    <input
+        type="hidden"
+        name="nearbyLocation"
+        value={formData.nearbyLocation || ""}
+    />
+
+    {!formData.nearbyLocation && (
+        <small
+            style={{
+                color: "#e53e3e",
+                fontSize: "11px",
+                marginTop: "4px"
+            }}
+        >
+            Please select an address from the Google suggestions.
+        </small>
+    )}
+</div>
                         </div>
                     </div>
 

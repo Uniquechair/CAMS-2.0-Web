@@ -114,7 +114,9 @@ const StatusBadge = ({ status = 'Unknown' }) => {
       case 'enquiry': return <FaStickyNote />;
       case 'pending':
       case 'booking': return <FaRegClock />;
-      case 'canceled': return <FaTrash />;
+      case 'canceled': 
+      case 'cancelled':
+         return <FaTrash />;
       case 'rejected': return <FaExclamationCircle />;
       case 'paid': return <FaCheck />;
       case 'partially paid': return <FaCreditCard />;
@@ -137,7 +139,7 @@ const StatusBadge = ({ status = 'Unknown' }) => {
     border: `1px solid ${CART_THEME.primaryBorder}`
   };
 }
-    if (s === 'canceled' || s === 'expired' || s === 'rejected') return { background: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb' }; 
+    if (s === 'canceled' || s === 'cancelled' || s === 'expired' || s === 'rejected') return { background: '#f8d7da', color: '#721c24', border: '1px solid #f5c6cb' }; 
     return { background: '#f8f9fa', color: '#343a40', border: '1px solid #e2e8f0' }; 
   };
 
@@ -424,7 +426,25 @@ const fetchMyReviews = async () => {
 };
 
 
-  const normalizeStatus = (status = '') => status.toString().trim().toLowerCase();
+ const normalizeStatus = (
+  status = ''
+) => {
+  const normalized =
+    status
+      .toString()
+      .trim()
+      .toLowerCase();
+
+  // Treat both spellings as the same status.
+  if (
+    normalized === 'cancelled' ||
+    normalized === 'canceled'
+  ) {
+    return 'canceled';
+  }
+
+  return normalized;
+};
 
 const isAutoCanceledReservation = (reservation) => {
   const status = normalizeStatus(reservation?.reservationstatus);
@@ -484,18 +504,51 @@ const getEffectiveReservationStatus = (reservation) => {
 };
 
   // --- PERFORMANCE OPTIMIZATION ---
-const { data: reservations = [], isLoading: loading, isFetching, refetch } = useQuery({
-  queryKey: ['cart', normalizedUserGroup, userId],
+const {
+  data: reservations = [],
+  isLoading: loading,
+  isFetching,
+  refetch
+} = useQuery({
+  queryKey: [
+    'cart',
+    normalizedUserGroup,
+    userId
+  ],
+
   queryFn: () => fetchCart(),
+
   enabled: isCartUserLoggedIn,
-staleTime: 2 * 60 * 1000,
-gcTime: 10 * 60 * 1000,
-refetchOnMount: false,
-refetchOnWindowFocus: false,
-refetchOnReconnect: false,
+
+  // Always consider cart data fresh from DB.
+  staleTime: 0,
+
+  gcTime: 10 * 60 * 1000,
+
+  // Customer opens Cart again
+  // → get latest reservation status.
+  refetchOnMount: 'always',
+
+  // Customer returns to browser tab
+  // → refresh latest status.
+  refetchOnWindowFocus: true,
+
+  refetchOnReconnect: true,
+
+  // While Cart is open, check for changes
+  // made by Admin / Moderator / Owner.
+  refetchInterval: 10000,
+
   onError: (error) => {
-    console.error('Error fetching reservations:', error);
-    displayToast('error', 'Failed to load your reservations. Please try again.');
+    console.error(
+      'Error fetching reservations:',
+      error
+    );
+
+    displayToast(
+      'error',
+      'Failed to load your reservations. Please try again.'
+    );
   }
 });
 
@@ -737,50 +790,153 @@ useEffect(() => {
 }, [paymentStatus, selectedReservation, queryClient, normalizedUserGroup, userId, refetch]);
 
 const updateStatusMutation = useMutation({
-  mutationFn: ({ reservationId, status, creatorid, creatorUsername }) =>
-    updateReservationStatus(reservationId, status, creatorid, creatorUsername),
-
-  onSuccess: (_, variables) => {
-    // Backend already confirmed success.
-    // Now update frontend immediately so the reservation moves faster.
-    updateReservationStatusInCartCache(variables.reservationId, variables.status);
-    const normalizedUpdatedStatus = normalizeStatus(variables.status);
-
-if (
-  normalizedUpdatedStatus === 'canceled' ||
-  normalizedUpdatedStatus === 'cancelled' ||
-  normalizedUpdatedStatus === 'expired' ||
-  normalizedUpdatedStatus === 'paid'
-) {
-  markReservationAsRecentlyUpdated(variables.reservationId);
-
-  setTimeout(() => {
-    document.getElementById('reservation-history-section')?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start'
+  mutationFn: async ({
+    reservationId,
+    status,
+    creatorid,
+    creatorUsername
+  }) => {
+    console.log('CART STATUS UPDATE REQUEST:', {
+      reservationId,
+      status,
+      creatorid,
+      creatorUsername
     });
-  }, 300);
-}
 
-    if (variables.status !== 'Paid' && variables.status !== 'Partially Paid') {
+    const result = await updateReservationStatus(
+      reservationId,
+      status,
+      creatorid,
+      creatorUsername
+    );
+
+    console.log('CART STATUS UPDATE RESPONSE:', result);
+
+    return result;
+  },
+
+  onSuccess: async (result, variables) => {
+    console.log('CART STATUS UPDATE SUCCESS:', {
+      requestedReservationId: variables.reservationId,
+      requestedStatus: variables.status,
+      backendResult: result
+    });
+
+    const backendReservation =
+      result?.reservation ||
+      result?.data?.reservation ||
+      null;
+
+    const backendStatus =
+      backendReservation?.reservationstatus ||
+      result?.reservationstatus ||
+      result?.data?.reservationstatus ||
+      '';
+
+    console.log('DATABASE STATUS RETURNED:', {
+      reservationId: variables.reservationId,
+      requestedStatus: variables.status,
+      backendStatus
+    });
+
+    // For cancellation, do not fake a successful status in frontend
+    // unless backend returned the expected status.
+    if (
+  normalizeStatus(variables.status) === 'canceled' &&
+  !['canceled', 'cancelled'].includes(normalizeStatus(backendStatus))
+) {
+      console.error(
+        'Cancellation mismatch: backend did not return Canceled',
+        {
+          requested: variables.status,
+          returned: backendStatus
+        }
+      );
+
+      displayToast(
+        'error',
+        'Cancellation was not confirmed by the server. Please try again.'
+      );
+
+      return;
+    }
+
+    // Only update frontend after backend success
+    updateReservationStatusInCartCache(
+      variables.reservationId,
+      variables.status
+    );
+
+    const normalizedUpdatedStatus =
+      normalizeStatus(variables.status);
+
+    if (
+      normalizedUpdatedStatus === 'canceled' ||
+      normalizedUpdatedStatus === 'cancelled' ||
+      normalizedUpdatedStatus === 'expired' ||
+      normalizedUpdatedStatus === 'paid'
+    ) {
+      markReservationAsRecentlyUpdated(
+        variables.reservationId
+      );
+
+      setTimeout(() => {
+        document
+          .getElementById('reservation-history-section')
+          ?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+      }, 300);
+    }
+
+    if (
+      variables.status !== 'Paid' &&
+      variables.status !== 'Partially Paid'
+    ) {
       const statusMessages = {
         Canceled: 'Your reservation has been canceled.',
-        Expired: 'Your reservation has expired due to non-payment.',
-        Pending: 'Your reservations have been checked out. Please wait for the response of the operators.'
+        Expired:
+          'Your reservation has expired due to non-payment.',
+        Pending:
+          'Your reservations have been checked out. Please wait for the response of the operators.'
       };
 
       displayToast(
         'success',
-        statusMessages[variables.status] || 'Status updated successfully.'
+        statusMessages[variables.status] ||
+          'Status updated successfully.'
       );
     }
 
-    // Refetch in background only. Do not wait for it.
-    queryClient.invalidateQueries({ queryKey: ['cart'], exact: false });
+   if (
+  normalizedUpdatedStatus === 'canceled' ||
+  normalizedUpdatedStatus === 'cancelled' ||
+  normalizedUpdatedStatus === 'expired'
+) {
+  await queryClient.invalidateQueries({
+    queryKey: ['product-properties'],
+    exact: false
+  });
+}
+
+// Refresh cart from database
+await queryClient.invalidateQueries({
+  queryKey: ['cart'],
+  exact: false
+});
+
+await refetch();
+    
   },
 
-  onError: () => {
-    displayToast('error', 'Failed to update reservation. Please try again.');
+  onError: (error) => {
+    console.error('CART STATUS UPDATE FAILED:', error);
+
+    displayToast(
+      'error',
+      'Failed to update reservation. Please try again.'
+    );
   },
 
   onSettled: () => {
@@ -920,32 +1076,56 @@ queryClient.setQueryData(['cart', normalizedUserGroup, userId], (oldData) => {
           await fetchPropertyOwnerPayPalId(reservation.propertyid);
           setShowPaymentModal(true);
           break;
-       case 'cancel':
+case 'cancel': {
   setIsCancelProcessing(true);
-  displayToast('warning', 'Processing cancellation...');
-  updateStatusMutation.mutate({
+
+  displayToast(
+    'warning',
+    'Processing cancellation...'
+  );
+
+  await updateStatusMutation.mutateAsync({
     reservationId: selectedReservationId,
     status: 'Canceled',
     creatorid: userId,
     creatorUsername: username
   });
+
   break;
+}
 
 case 'cancel_forfeit':
   setActionToConfirm('cancel_forfeit_final');
   setShowConfirmModal(true);
   return;
 
-case 'cancel_forfeit_final':
+case 'cancel_forfeit_final': {
   setIsCancelProcessing(true);
-  displayToast('warning', 'Processing cancellation. Deposit will not be refunded...');
-  updateStatusMutation.mutate({
+
+  displayToast(
+    'warning',
+    'Processing cancellation. Deposit will not be refunded...'
+  );
+
+  console.log('CANCEL PARTIALLY PAID RESERVATION:', {
+    reservationId: selectedReservationId,
+    oldStatus: safeReservations.find(
+      (r) =>
+        String(r.reservationid) ===
+        String(selectedReservationId)
+    )?.reservationstatus,
+    newStatus: 'Canceled'
+  });
+
+  await updateStatusMutation.mutateAsync({
     reservationId: selectedReservationId,
     status: 'Canceled',
     creatorid: userId,
     creatorUsername: username
   });
+
   break;
+}
         case 'remove':
           displayToast('success', 'Removing...');
           removeReservationMutation.mutate(selectedReservationId);
@@ -1140,11 +1320,22 @@ try {
 const ACTIVE_STATUSES = ['payment pending', 'pending', 'booking', 'accepted', 'partially paid'];
 
 const activeCartReservations = useMemo(() => {
-  return safeReservations.filter((reservation) => {
-    const status = normalizeStatus(getEffectiveReservationStatus(reservation));
-    return ACTIVE_STATUSES.includes(status);
-  });
-}, [safeReservations, lastPaidReservationId, recentlyPaidReservationIds]);
+  return safeReservations
+    .filter((reservation) => {
+      const status = normalizeStatus(
+        getEffectiveReservationStatus(reservation)
+      );
+
+      return ACTIVE_STATUSES.includes(status);
+    })
+    .sort((a, b) => {
+      return Number(b.reservationid || 0) - Number(a.reservationid || 0);
+    });
+}, [
+  safeReservations,
+  lastPaidReservationId,
+  recentlyPaidReservationIds
+]);
 
 const historyReservationsRaw = useMemo(() => {
   return safeReservations.filter((reservation) => {

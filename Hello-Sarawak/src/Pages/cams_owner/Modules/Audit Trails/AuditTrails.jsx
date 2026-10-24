@@ -31,17 +31,24 @@ const {
   queryFn: () => auditTrails(userid),
   enabled: !!userid,
 
-  // refresh every 5 minutes
-  refetchInterval: 5 * 60 * 1000,
-
-  // refresh when user comes back to this page
-  refetchOnWindowFocus: true,
-
-  // allow manual refetch to really get latest data
   staleTime: 0,
 
+  // Always get latest Audit Trail when page opens.
+  refetchOnMount: 'always',
+
+  // Refresh when returning to browser tab.
+  refetchOnWindowFocus: true,
+
+  // Keep Owner Audit Trail updated.
+  refetchInterval: 10000,
+
+  retry: 1,
+
   onError: (error) => {
-    console.error('Failed to fetch Audit Trails Logs:', error);
+    console.error(
+      'Failed to fetch Audit Trails Logs:',
+      error
+    );
   },
 });
 
@@ -94,14 +101,15 @@ const filteredLogs = auditTrailsLog
       .toLowerCase();
 
     const allText = [
-      log.userid,
-      log.entityid,
-      log.entitytype,
-      log.actiontype,
-      log.action,
-      log.username,
-      log.timestamp,
-    ]
+  log.audittrailid,
+  log.userid,
+  log.entityid,
+  log.entitytype,
+  log.actiontype,
+  log.action,
+  log.username,
+  log.timestamp,
+]
       .map((value) => String(value || '').toLowerCase())
       .join(' ');
 
@@ -124,26 +132,39 @@ const filteredLogs = auditTrailsLog
     return matchesSearch && matchesAction;
   })
   .sort((a, b) => {
-    const timeA = new Date(a.timestamp).getTime();
-    const timeB = new Date(b.timestamp).getTime();
+  const idA = Number(a.audittrailid || 0);
+  const idB = Number(b.audittrailid || 0);
 
-    if (Number.isNaN(timeA)) return 1;
-    if (Number.isNaN(timeB)) return -1;
+  // Newest created Audit Trail first.
+  if (idB !== idA) {
+    return idB - idA;
+  }
 
-    return timeB - timeA;
-  });
+  // Timestamp is only the backup.
+  const timeA =
+    new Date(a.timestamp).getTime();
+
+  const timeB =
+    new Date(b.timestamp).getTime();
+
+  if (Number.isNaN(timeA)) return 1;
+  if (Number.isNaN(timeB)) return -1;
+
+  return timeB - timeA;
+});
 
   const handleAction = (action, log) => {
     if (action === 'view') {
       const essentialFields = {
-        creatorid: log.userid || 'N/A',
-        actionedby: log.username || 'N/A',
-        entityid: log.entityid || 'N/A',
-        entitytype: log.entitytype || 'N/A',
-        timestamp: log.timestamp || 'N/A',
-        action: log.action || 'N/A',
-        actiontype: log.actiontype || 'N/A',
-      };
+  audittrailid: log.audittrailid || 'N/A',
+  creatorid: log.userid || 'N/A',
+  actionedby: log.username || 'N/A',
+  entityid: log.entityid || 'N/A',
+  entitytype: log.entitytype || 'N/A',
+  timestamp: log.timestamp || 'N/A',
+  action: log.action || 'N/A',
+  actiontype: log.actiontype || 'N/A',
+};
       setSelectedLog(essentialFields);
     }
   };
@@ -198,11 +219,14 @@ const filteredLogs = auditTrailsLog
           <Loader />
         </div>
       ) : (
-       <PaginatedTable
-  key={`${appliedFilters.actionType}-${searchKey}-${filteredLogs.length}`}
+      <PaginatedTable
+  key={`${appliedFilters.actionType}-${searchKey}-${filteredLogs[0]?.audittrailid || 0}`}
   data={filteredLogs}
   columns={columns}
-  rowKey={(log) => log.audittrailid || `${log.timestamp}-${log.entityid}-${log.action}`}
+  rowKey={(log) =>
+    log.audittrailid ||
+    `${log.timestamp}-${log.entityid}-${log.action}`
+  }
   enableCheckbox={false}
 />
       )}

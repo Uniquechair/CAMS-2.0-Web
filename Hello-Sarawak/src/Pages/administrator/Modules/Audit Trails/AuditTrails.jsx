@@ -28,21 +28,23 @@ const {
   refetch,
 } = useQuery({
   queryKey: ['auditTrails', userid],
-  queryFn: () => auditTrails(userid),
+
+  queryFn: () =>
+    auditTrails(userid),
+
   enabled: !!userid,
 
-  // refresh every 5 minutes
-  refetchInterval: 5 * 60 * 1000,
-
-  // refresh when user comes back to this page
-  refetchOnWindowFocus: true,
-
-  // allow manual refetch to really get latest data
+  // Always get the newest Audit Trail
+  // whenever this page is opened again.
   staleTime: 0,
 
-  onError: (error) => {
-    console.error('Failed to fetch Audit Trails Logs:', error);
-  },
+  refetchOnMount: 'always',
+
+  // Refresh when user returns to browser/tab.
+  refetchOnWindowFocus: true,
+
+  // Auto refresh while staying on this page.
+  refetchInterval: 10000,
 });
 const handleApplyFilters = () => {
   setAppliedFilters({ actionType: selectedActionType });
@@ -121,9 +123,30 @@ const filteredLogs = auditTrailsLog
 
     return matchesSearch && matchesAction;
   })
-  .sort((a, b) => {
-    return Number(b.audittrailid || 0) - Number(a.audittrailid || 0);
-  });
+.sort((a, b) => {
+  // 1. Newest action first
+  const idA =
+    Number(a.audittrailid || 0);
+
+  const idB =
+    Number(b.audittrailid || 0);
+
+  if (idB !== idA) {
+    return idB - idA;
+  }
+
+  // 2. Timestamp only used as backup
+  const timeA =
+    new Date(a.timestamp).getTime();
+
+  const timeB =
+    new Date(b.timestamp).getTime();
+
+  if (Number.isNaN(timeA)) return 1;
+  if (Number.isNaN(timeB)) return -1;
+
+  return timeB - timeA;
+});
 
   const handleAction = (action, log) => {
     if (action === 'view') {
@@ -191,7 +214,7 @@ const filteredLogs = auditTrailsLog
         </div>
       ) : (
         <PaginatedTable
-  key={`${appliedFilters.actionType}-${searchKey}-${filteredLogs.length}`}
+  key={`${appliedFilters.actionType}-${searchKey}-${filteredLogs.length}-${filteredLogs[0]?.audittrailid || 0}`}
   data={filteredLogs}
   columns={columns}
   rowKey={(log) => log.audittrailid || `${log.timestamp}-${log.entityid}-${log.action}`}

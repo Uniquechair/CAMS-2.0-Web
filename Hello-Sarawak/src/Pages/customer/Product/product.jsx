@@ -297,6 +297,7 @@ const Product = () => {
   const [selectedBookingOptions, setSelectedBookingOptions] = useState([]);
 
   const [isDateOverlapping, setIsDateOverlapping] = useState({});
+  const [availabilityRefreshKey, setAvailabilityRefreshKey] = useState(0);
   const [hasSearchedWithDates, setHasSearchedWithDates] = useState(false);
   const [dynamicPrices, setDynamicPrices] = useState({});
   const [isCalculatingPrices, setIsCalculatingPrices] = useState(false);
@@ -323,8 +324,8 @@ const { data: fetchedProperties, isLoading, error } = useQuery({
   queryFn: fetchProduct,
   staleTime: 60 * 1000,
   gcTime: 10 * 60 * 1000,
-  refetchOnMount: false,
-  refetchOnWindowFocus: false,
+  refetchOnMount: true,
+refetchOnWindowFocus: true,
   refetchOnReconnect: true,
   retry: 1,
 });
@@ -645,23 +646,35 @@ const sameRoom =
     return !booked.packageName;
   };
 
-  const countUniqueMatchingBookings = (bookings = [], baseRoomName = '', packageName = '') => {
-    const ids = new Set();
+const countUniqueMatchingBookings = (
+  bookings = [],
+  baseRoomName = '',
+  packageName = ''
+) => {
+  const ids = new Set();
 
-    bookings.forEach((booking, index) => {
-      if (!shouldHoldRoomStock(booking)) return;
+  bookings.forEach((booking, index) => {
+    if (!shouldHoldRoomStock(booking)) {
+      return;
+    }
 
-      if (bookingMatchesRoomAndPackage(booking, baseRoomName, packageName)) {
-        ids.add(
-          booking.reservationid ||
-          booking.id ||
-          `${booking.request || booking.reservationrequest || ''}-${index}`
-        );
-      }
-    });
+    if (
+      bookingMatchesRoomAndPackage(
+        booking,
+        baseRoomName,
+        packageName
+      )
+    ) {
+      ids.add(
+        booking.reservationid ||
+        booking.id ||
+        `${booking.request || booking.reservationrequest || ''}-${index}`
+      );
+    }
+  });
 
-    return ids.size;
-  };
+  return ids.size;
+};
 
   const checkPropertyAllRoomsSoldOut = async (prop, checkIn, checkOut) => {
     const propId = parseInt(prop?.propertyid, 10);
@@ -727,23 +740,53 @@ if (roomCheck.packageName) {
   availabilityUrl.searchParams.set('packageName', roomCheck.packageName);
 }
 
-        const response = await fetch(availabilityUrl.toString(), {
-          credentials: 'include'
-        });
+       // Always request the latest stock.
+// This avoids using an old GET response after booking/cancellation.
+availabilityUrl.searchParams.set('_t', Date.now().toString());
 
+const response = await fetch(availabilityUrl.toString(), {
+  credentials: 'include',
+  cache: 'no-store',
+  headers: {
+    'Cache-Control': 'no-cache'
+  }
+});
         if (!response.ok) {
           throw new Error('Failed to check property availability');
         }
 
         const data = await response.json();
+        console.log('STOCK API DEBUG:', {
+  propertyid: propId,
+  checkIn,
+  checkOut,
+  roomName: roomCheck.baseRoomName,
+  packageName: roomCheck.packageName,
+  backendBookedCount: data.bookedCount,
+  bookings: (data.bookings || []).map((booking) => ({
+    reservationid: booking.reservationid,
+    reservationstatus: booking.reservationstatus,
+    request: booking.request
+  }))
+});
 
         const bookedCount = countUniqueMatchingBookings(
-          data.bookings || [],
-          roomCheck.baseRoomName,
-          roomCheck.packageName
-        );
+  data.bookings || [],
+  roomCheck.baseRoomName,
+  roomCheck.packageName
+);
 
-        const left = Math.max(0, roomCheck.totalQty - bookedCount);
+const left = Math.max(0, roomCheck.totalQty - bookedCount);
+
+// DEBUG
+console.log('STOCK CALCULATION DEBUG:', {
+  propertyid: propId,
+  roomName: roomCheck.baseRoomName,
+  packageName: roomCheck.packageName,
+  totalQty: roomCheck.totalQty,
+  bookedCount,
+  left
+});
 
         return {
           ...roomCheck,
@@ -919,6 +962,7 @@ const handleInputChange = (name, value) => {
 
   const clearDates = (e) => {
     if (e) e.stopPropagation();
+    setIsDateOverlapping({});
 
     setBookingData((prev) => ({
       ...prev,
@@ -952,7 +996,28 @@ useEffect(() => {
     const searchTerm = normalizeText(propertySearchTerm);
 
     let filteredProperties = propertiesArray.filter((property) => {
-      if (property.propertystatus !== 'Available') return false;
+
+  console.log(' FILTER CHECK:', {
+    propertyid: property.propertyid,
+    propertyname: property.propertyname,
+    status: property.propertystatus,
+    cluster: property.clustername,
+    category: property.categoryname,
+    guestPax: property.propertyguestpaxno,
+    selectedCluster: targetCluster,
+    totalGuests,
+    propertyPrice: getPropertyFilterPrice(property)
+  });
+
+  if (property.propertystatus !== 'Available') {
+    console.log(' FILTERED OUT - STATUS:', {
+      propertyid: property.propertyid,
+      propertyname: property.propertyname,
+      status: property.propertystatus
+    });
+
+    return false;
+  }
         if (searchTerm) {
     const searchableText = normalizeText(`
       ${property.propertyname || ''}
@@ -966,18 +1031,52 @@ useEffect(() => {
 
       const propertyPrice = getPropertyFilterPrice(property);
 
-      if (propertyPrice < priceRange.min || propertyPrice > priceRange.max) return false;
+      if (propertyPrice < priceRange.min || propertyPrice > priceRange.max) {
+  console.log(' FILTERED OUT - PRICE:', {
+    propertyid: property.propertyid,
+    propertyname: property.propertyname,
+    propertyPrice,
+    min: priceRange.min,
+    max: priceRange.max
+  });
 
-      if (Number(property.propertyguestpaxno || 0) < totalGuests) return false;
+  return false;
+}
 
-      if (targetCluster && property.clustername !== targetCluster) return false;
+      if (Number(property.propertyguestpaxno || 0) < totalGuests) {
+  console.log(' FILTERED OUT - GUEST:', {
+    propertyid: property.propertyid,
+    propertyname: property.propertyname,
+    propertyGuestPax: property.propertyguestpaxno,
+    requestedGuests: totalGuests
+  });
+
+  return false;
+}
+
+      if (targetCluster && property.clustername !== targetCluster) {
+  console.log(' FILTERED OUT - CLUSTER:', {
+    propertyid: property.propertyid,
+    propertyname: property.propertyname,
+    propertyCluster: property.clustername,
+    selectedCluster: targetCluster
+  });
+
+  return false;
+}
 
       const exactCategory = String(property.categoryname || '').trim();
 
 if (propertyCategory !== 'All' && exactCategory !== propertyCategory) {
+  console.log('FILTERED OUT - CATEGORY:', {
+    propertyid: property.propertyid,
+    propertyname: property.propertyname,
+    category: exactCategory,
+    selectedCategory: propertyCategory
+  });
+
   return false;
 }
-
       if (safePropertyTypes.length > 0) {
   const matchedType = safePropertyTypes.includes(exactCategory);
 
@@ -1021,11 +1120,18 @@ if (propertyCategory !== 'All' && exactCategory !== propertyCategory) {
 const handleCheckAvailability = async (e, overrideCluster = undefined) => {
   if (e) e.stopPropagation();
 
+  // Clear old availability information
+  setIsDateOverlapping({});
+
+  // Force availability APIs to run again,
+  // even when user searches exactly the same dates
+  setAvailabilityRefreshKey((prev) => prev + 1);
+
   try {
-  const fetchedProps = fetchedProperties || await queryClient.fetchQuery({
+ const fetchedProps = await queryClient.fetchQuery({
   queryKey: PRODUCT_QUERY_KEY,
   queryFn: fetchProduct,
-  staleTime: 60 * 1000,
+  staleTime: 0,
 });
     const safePropsArray = Array.isArray(fetchedProps)
       ? fetchedProps
@@ -1071,10 +1177,17 @@ const handleCheckAvailability = async (e, overrideCluster = undefined) => {
   useEffect(() => {
     if (!fetchedProperties) return;
 
-    if (hasSearchedWithDates && bookingData.checkIn && bookingData.checkOut) {
-      handleCheckAvailability();
-      return;
-    }
+   if (hasSearchedWithDates && bookingData.checkIn && bookingData.checkOut) {
+  const propertiesArray = Array.isArray(fetchedProperties)
+    ? fetchedProperties
+    : (fetchedProperties.data || fetchedProperties.properties || []);
+
+  const filteredProperties = applyProductFilters(propertiesArray);
+
+  setAllProperties(filteredProperties);
+  setPage(1);
+  return;
+}
 
     const propertiesArray = Array.isArray(fetchedProperties)
       ? fetchedProperties
@@ -1480,12 +1593,30 @@ const safeProperties = useMemo(() => {
 
 // Hide sold-out properties BEFORE pagination
 const visibleProperties = useMemo(() => {
-  if (!hasSearchedWithDates) return safeProperties;
+  // Before searching dates, show all available property listings.
+  if (!hasSearchedWithDates) {
+    return safeProperties;
+  }
 
-  return safeProperties.filter(
-    (property) => !isDateOverlapping[property.propertyid]?.soldOut
-  );
-}, [safeProperties, hasSearchedWithDates, isDateOverlapping]);
+  // After date search, completely remove properties
+  // whose room/package stock is fully sold out.
+  return safeProperties.filter((property) => {
+    const availability =
+      isDateOverlapping[property.propertyid];
+
+    // While availability is still loading,
+    // do not hide the property prematurely.
+    if (!availability) {
+      return true;
+    }
+
+    return availability.soldOut !== true;
+  });
+}, [
+  safeProperties,
+  hasSearchedWithDates,
+  isDateOverlapping
+]);
 
 const totalPages = useMemo(() => {
   return Math.ceil(visibleProperties.length / itemsPerPage);
@@ -1502,13 +1633,14 @@ const currentProperties = useMemo(() => {
     const fetchPricesAndAvailabilityForPage = async () => {
 if (!hasSearchedWithDates || safeProperties.length === 0) return;
       const newPrices = { ...dynamicPrices };
-      const newOverlaps = { ...isDateOverlapping };
+
+// Always start availability from a clean object.
+// Stock can change after payment, cancellation, or expiry.
+const newOverlaps = {};
 
      const sourceProperties = safeProperties;
 
-const propsToFetch = sourceProperties.filter(
-  (prop) => !newPrices[prop.propertyid] || !newOverlaps[prop.propertyid]
-);
+const propsToFetch = sourceProperties;
 
       if (propsToFetch.length === 0) return;
 
@@ -1578,44 +1710,61 @@ const propsToFetch = sourceProperties.filter(
           }
         }
 
-        if (!newOverlaps[prop.propertyid]) {
-          try {
-            const overlapData = await checkDateOverlap(
-              prop.propertyid,
-              bookingData.checkIn,
-              bookingData.checkOut
-            );
+       try {
+  const overlapData = await checkDateOverlap(
+    prop.propertyid,
+    bookingData.checkIn,
+    bookingData.checkOut
+  );
 
-            if (overlapData?.isBlackout) {
-              newOverlaps[prop.propertyid] = {
-                soldOut: true,
-                lowStock: false,
-                roomsLeft: 0
-              };
-            } else {
-              const availabilityResult = await checkPropertyAllRoomsSoldOut(
-                prop,
-                bookingData.checkIn,
-                bookingData.checkOut
-              );
+  console.log('DATE OVERLAP DEBUG:', {
+  propertyid: prop.propertyid,
+  propertyname: prop.propertyname,
+  checkIn: bookingData.checkIn,
+  checkOut: bookingData.checkOut,
+  overlapData
+});
 
-              newOverlaps[prop.propertyid] = {
-                soldOut: availabilityResult.soldOut,
-                lowStock: availabilityResult.lowStock,
-                roomsLeft: availabilityResult.roomsLeft,
-                roomResults: availabilityResult.roomResults || []
-              };
-            }
-          } catch (err) {
-            console.error('Failed to check room-level stock for product page:', err);
+  if (overlapData?.isBlackout) {
+    newOverlaps[prop.propertyid] = {
+      soldOut: true,
+      lowStock: false,
+      roomsLeft: 0
+    };
+  } else {
+    const availabilityResult = await checkPropertyAllRoomsSoldOut(
+      prop,
+      bookingData.checkIn,
+      bookingData.checkOut
+    );
+    console.log(' FINAL PRODUCT STOCK:', {
+  propertyid: prop.propertyid,
+  propertyname: prop.propertyname,
+  soldOut: availabilityResult.soldOut,
+  lowStock: availabilityResult.lowStock,
+  roomsLeft: availabilityResult.roomsLeft,
+  roomResults: availabilityResult.roomResults
+});
 
-            newOverlaps[prop.propertyid] = {
-              soldOut: false,
-              lowStock: false,
-              roomsLeft: null
-            };
-          }
-        }
+    newOverlaps[prop.propertyid] = {
+      soldOut: availabilityResult.soldOut,
+      lowStock: availabilityResult.lowStock,
+      roomsLeft: availabilityResult.roomsLeft,
+      roomResults: availabilityResult.roomResults || []
+    };
+  }
+} catch (err) {
+  console.error(
+    'Failed to check room-level stock for product page:',
+    err
+  );
+
+  newOverlaps[prop.propertyid] = {
+    soldOut: false,
+    lowStock: false,
+    roomsLeft: null
+  };
+}
       }));
 
   
@@ -1627,7 +1776,13 @@ const propsToFetch = sourceProperties.filter(
 
     fetchPricesAndAvailabilityForPage();
   // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [safeProperties, hasSearchedWithDates, bookingData.checkIn, bookingData.checkOut]);
+}, [
+  safeProperties,
+  hasSearchedWithDates,
+  bookingData.checkIn,
+  bookingData.checkOut,
+  availabilityRefreshKey
+]);
 
   const initializedFromState = useRef(false);
 

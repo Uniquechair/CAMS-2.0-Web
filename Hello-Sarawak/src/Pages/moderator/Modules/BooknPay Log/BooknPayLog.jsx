@@ -64,15 +64,25 @@ const BooknPayLog = () => {
   }
 };
 
-  const { data: logsResponse = [], isLoading } = useQuery({
-    queryKey: ['bookLogs', userid],
-    queryFn: () => fetchBookLog(userid),
-    enabled: !!userid,
-    onError: (error) => {
-      console.error('Failed to fetch Book & Pay Logs:', error);
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+ const {
+  data: logsResponse = [],
+  isLoading,
+} = useQuery({
+  queryKey: ['bookLogs', userid],
+
+  queryFn: () =>
+    fetchBookLog(userid),
+
+  enabled: !!userid,
+
+  staleTime: 0,
+
+  refetchOnMount: 'always',
+
+  refetchOnWindowFocus: true,
+
+  refetchInterval: 10000,
+});
 
   const logs = Array.isArray(logsResponse)
     ? logsResponse

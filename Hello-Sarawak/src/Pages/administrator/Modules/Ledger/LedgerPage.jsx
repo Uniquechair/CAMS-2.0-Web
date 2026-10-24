@@ -13,7 +13,6 @@ const normalizeStatusText = (status) => {
   if (s === "paid") return "Paid";
   if (s === "expired") return "Expired";
   if (s === "cancelled" || s === "canceled") return "Cancelled";
-  if (s === "accepted") return "Accepted";
   if (s === "payment pending") return "Payment Pending";
   if (s === "deducted") return "Deducted";
   if (s === "restored") return "Restored";
@@ -68,58 +67,131 @@ const getOperatorLabel = (row) => {
 };
 
 const getPaymentExplanation = (row) => {
-  const status = normalizeStatusText(row.booking_status).toLowerCase();
+  const status =
+    normalizeStatusText(
+      row.booking_status
+    ).toLowerCase();
+
+  const activityType =
+    String(row.activity_type || "")
+      .trim()
+      .toLowerCase();
+
+  // Manual Restock refund
+  if (
+    status === "cancelled" &&
+    activityType === "manual restock"
+  ) {
+    return {
+      title:
+        "Booking was manually restocked and the refund was recorded.",
+
+      creditLabel:
+        "Operator Earning After Refund",
+
+      debitLabel:
+        "Refund Amount",
+
+      expectedLabel:
+        "Revenue Retained",
+    };
+  }
 
   if (status === "partially paid") {
     return {
-      title: "Deposit received. Balance is still pending.",
-      creditLabel: "Balance Remaining",
-      debitLabel: "Deposit Paid",
-      expectedLabel: "Total Booking Amount",
+      title:
+        "Deposit received. Balance is still pending.",
+
+      creditLabel:
+        "Balance Remaining",
+
+      debitLabel:
+        "Deposit Paid",
+
+      expectedLabel:
+        "Total Booking Amount",
     };
   }
 
   if (status === "paid") {
     return {
-      title: "Payment completed. Operator earning is ready.",
-      creditLabel: "Operator Earning",
-      debitLabel: "Deposit / Debit",
-      expectedLabel: "Total Paid Amount",
+      title:
+        "Payment completed. Operator earning is ready.",
+
+      creditLabel:
+        "Operator Earning",
+
+      debitLabel:
+        "Deposit / Debit",
+
+      expectedLabel:
+        "Total Paid Amount",
     };
   }
 
   if (status === "cancelled") {
     return {
-      title: "Booking was cancelled. Stock has been restored.",
-      creditLabel: "Credit",
-      debitLabel: "Debit",
-      expectedLabel: "Booking Amount",
+      title:
+        "Booking was cancelled. Stock has been restored.",
+
+      creditLabel:
+        "Credit",
+
+      debitLabel:
+        "Debit",
+
+      expectedLabel:
+        "Booking Amount",
     };
   }
 
   if (status === "expired") {
     return {
-      title: "Booking expired due to payment deadline. Stock has been restored.",
-      creditLabel: "Credit",
-      debitLabel: "Debit",
-      expectedLabel: "Booking Amount",
+      title:
+        "Booking expired due to payment deadline. Stock has been restored.",
+
+      creditLabel:
+        "Credit",
+
+      debitLabel:
+        "Debit",
+
+      expectedLabel:
+        "Booking Amount",
     };
   }
 
-  if (status === "accepted" || status === "payment pending") {
+  if (
+    status === "accepted" ||
+    status === "payment pending"
+  ) {
     return {
-      title: "Booking is waiting for payment confirmation.",
-      creditLabel: "Credit",
-      debitLabel: "Debit",
-      expectedLabel: "Booking Amount",
+      title:
+        "Booking is waiting for payment confirmation.",
+
+      creditLabel:
+        "Credit",
+
+      debitLabel:
+        "Debit",
+
+      expectedLabel:
+        "Booking Amount",
     };
   }
 
   return {
-    title: "Booking record.",
-    creditLabel: "Credit",
-    debitLabel: "Debit",
-    expectedLabel: "Expected Amount",
+    title:
+      "Booking record.",
+
+    creditLabel:
+      "Credit",
+
+    debitLabel:
+      "Debit",
+
+    expectedLabel:
+      "Expected Amount",
   };
 };
 
@@ -276,7 +348,13 @@ useEffect(() => {
         sortOrder: sortOrder || "latest",
       });
 
-      const res = await fetch(`${BASE_URL}/ledger?${params.toString()}`);
+      const res = await fetch(
+  `${BASE_URL}/ledger?${params.toString()}`,
+  {
+    method: "GET",
+    cache: "no-store",
+  }
+);
       const data = await res.json();
 
       if (!res.ok) {
@@ -322,7 +400,13 @@ const fetchSummary = async () => {
       search: searchText || "",
     });
 
-    const res = await fetch(`${BASE_URL}/ledger/summary?${params.toString()}`);
+    const res = await fetch(
+  `${BASE_URL}/ledger/summary?${params.toString()}`,
+  {
+    method: "GET",
+    cache: "no-store",
+  }
+);
     const data = await res.json();
 
     setSummary(
@@ -393,17 +477,17 @@ const handlePageChange = (nextPage) => {
           type="credit"
           helper="Balance / earning"
         />
-        <SummaryCard
-          title="Total Debit"
-          value={summary.total_debit}
-          type="debit"
-          helper="Deposit paid"
-        />
+       <SummaryCard
+  title="Total Debit"
+  value={summary.total_debit}
+  type="debit"
+  helper="Deposits / Refunds"
+/>
         <SummaryCard
           title="Total Expected"
           value={summary.total_expected}
           type="expected"
-          helper="Booking total"
+          helper="Booking / retained amount"
         />
         <SummaryCard
           title="Total Commission"
@@ -472,10 +556,10 @@ const handlePageChange = (nextPage) => {
 
           <div className="ledger-filter-group ledger-search-group">
             <label>Search</label>
-            <input
-              type="text"
-              placeholder="Search property, customer, operator, room..."
-              value={searchText}
+           <input
+  type="text"
+  placeholder="Search reservation ID, property, customer, operator, room..."
+  value={searchText}
               onChange={(e) => {
                 setSearchText(e.target.value);
                 setPage(1);
@@ -593,14 +677,10 @@ const handlePageChange = (nextPage) => {
                     </div>
 
                     {row.remarks && !isHiddenRemark(row.remarks) && (
-                      <div className="ledger-remarks">
-                        {row.remarks}
-                      </div>
-                    )}
-
-                    <div className="ledger-timestamp">
-                      {row.formatted_timestamp || row.timestamp || "—"}
-                    </div>
+  <div className="ledger-remarks">
+    {row.remarks}
+  </div>
+)}
                   </div>
 
                   <div className="ledger-record-right">

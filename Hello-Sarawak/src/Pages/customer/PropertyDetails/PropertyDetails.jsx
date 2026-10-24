@@ -2116,170 +2116,321 @@ useEffect(() => {
   }, [propertyDetails]);
 
   useEffect(() => {
-    const fetchNearbyPlaces = async () => {
-      setNearbyPlaces({ walkable: [], landmarks: [] });
-      setNearbyError('');
+  let isCancelled = false;
 
-      const addressForNearbySearch =
-        propertyDetails?.nearbylocation ||
-        propertyDetails?.propertyaddress ||
-        '';
+  const fetchNearbyPlaces = async () => {
+    setNearbyPlaces({
+      walkable: [],
+      landmarks: []
+    });
 
-      if (
-        !window.google ||
-        !window.google.maps ||
-        !window.google.maps.places
-      ) {
-        setNearbyError('Google Places is not loaded. Please check that libraries=places is added.');
-        return;
-      }
+    setNearbyError('');
 
-      setNearbyLoading(true);
+    const addressForNearbySearch =
+      propertyDetails?.nearbylocation ||
+      propertyDetails?.propertyaddress ||
+      '';
 
-      const service = new window.google.maps.places.PlacesService(
-        document.createElement('div')
-      );
+    if (
+      !window.google ||
+      !window.google.maps ||
+      !window.google.maps.importLibrary
+    ) {
+      setNearbyError(
+        'Google Places is not loaded.'
+      );
+      return;
+    }
 
-      const getDistance = (lat1, lon1, lat2, lon2) => {
-        const R = 6371e3;
-        const dLat = ((lat2 - lat1) * Math.PI) / 180;
-        const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    setNearbyLoading(true);
 
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((lat1 * Math.PI) / 180) *
-            Math.cos((lat2 * Math.PI) / 180) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2);
+    const getDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371e3;
 
-        return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-      };
+      const dLat =
+        ((lat2 - lat1) * Math.PI) / 180;
 
-      const formatDistance = (meters) => {
-        if (meters < 1000) return `${Math.round(meters)} m`;
-        return `${(meters / 1000).toFixed(1)} km`;
-      };
+      const dLon =
+        ((lon2 - lon1) * Math.PI) / 180;
 
-      const runNearbySearch = (request) => {
-        return new Promise((resolve) => {
-          service.nearbySearch(request, (results, status) => {
-            if (
-              status === window.google.maps.places.PlacesServiceStatus.OK &&
-              Array.isArray(results)
-            ) {
-              resolve(results);
-            } else {
-              resolve([]);
-            }
-          });
-        });
-      };
+      const a =
+        Math.sin(dLat / 2) *
+          Math.sin(dLat / 2) +
+        Math.cos(
+          (lat1 * Math.PI) / 180
+        ) *
+          Math.cos(
+            (lat2 * Math.PI) / 180
+          ) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
 
-      const runTextSearch = (request) => {
-        return new Promise((resolve) => {
-          service.textSearch(request, (results, status) => {
-            if (
-              status === window.google.maps.places.PlacesServiceStatus.OK &&
-              Array.isArray(results)
-            ) {
-              resolve(results);
-            } else {
-              resolve([]);
-            }
-          });
-        });
-      };
+      return (
+        R *
+        (2 *
+          Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1 - a)
+          ))
+      );
+    };
 
-  const normalizeNearbyPlaces = (places, limit) => {
-    const seen = new Set();
+    const formatDistance = (meters) => {
+      if (meters < 1000) {
+        return `${Math.round(meters)} m`;
+      }
 
-    return places
-      .filter((place) => place?.name)
-      .map((place) => {
-        let meters = 0;
+      return `${(meters / 1000).toFixed(1)} km`;
+    };
 
-        if (
-          locationCoords?.lat &&
-          locationCoords?.lng &&
-          place?.geometry?.location
-        ) {
-          const placeLat = place.geometry.location.lat();
-          const placeLng = place.geometry.location.lng();
+    const normalizeNearbyPlaces = (
+      places,
+      limit
+    ) => {
+      const seen = new Set();
 
-          meters = getDistance(
-            locationCoords.lat,
-            locationCoords.lng,
-            placeLat,
-            placeLng
-          );
-        }
+      return (places || [])
+        .filter(
+          (place) =>
+            place?.displayName &&
+            place?.location
+        )
+        .map((place) => {
+          let meters = 0;
 
-      return {
-    name: place.name.trim(),
-    meters,
-    distanceText: meters > 0 ? formatDistance(meters) : '',
-    placeId: place.place_id || ''
-  };
-      })
-      .filter((place) => {
-  const key = `name-${place.name.toLowerCase().trim()}`;
+          if (
+            locationCoords?.lat &&
+            locationCoords?.lng &&
+            place.location
+          ) {
+            const placeLat =
+              place.location.lat();
 
-        if (seen.has(key)) return false;
+            const placeLng =
+              place.location.lng();
 
-        seen.add(key);
-        return true;
-      })
-      .sort((a, b) => a.meters - b.meters)
-      .slice(0, limit);
-  };
-      try {
-        let businessResults = [];
-        let landmarkResults = [];
+            meters = getDistance(
+              Number(locationCoords.lat),
+              Number(locationCoords.lng),
+              placeLat,
+              placeLng
+            );
+          }
 
-        if (locationCoords?.lat && locationCoords?.lng) {
-          const propertyLocation = new window.google.maps.LatLng(
-            locationCoords.lat,
-            locationCoords.lng
-          );
+          return {
+            name: place.displayName.trim(),
+            meters,
+            distanceText:
+              meters > 0
+                ? formatDistance(meters)
+                : '',
+            placeId: place.id || ''
+          };
+        })
+        .filter((place) => {
+          const key =
+            place.placeId ||
+            `name-${place.name
+              .toLowerCase()
+              .trim()}`;
 
-          businessResults = await runNearbySearch({
-            location: propertyLocation,
-            radius: 1500,
-            keyword: 'restaurant cafe shop supermarket pharmacy business'
-          });
+          if (seen.has(key)) {
+            return false;
+          }
 
-          landmarkResults = await runNearbySearch({
-            location: propertyLocation,
-            radius: 10000,
-            keyword: 'tourist attraction shopping mall transit station park museum'
-          });
-        } else if (addressForNearbySearch) {
-          businessResults = await runTextSearch({
-            query: `restaurants cafes shops supermarkets pharmacies near ${addressForNearbySearch}`
-          });
+          seen.add(key);
+          return true;
+        })
+        .sort((a, b) => {
+          if (!a.meters && !b.meters) {
+            return 0;
+          }
 
-          landmarkResults = await runTextSearch({
-            query: `tourist attractions shopping malls transport stations near ${addressForNearbySearch}`
-          });
-        } else {
-          setNearbyError('Nearby places are not available because the property location cannot be detected.');
-          return;
-        }
+          if (!a.meters) return 1;
+          if (!b.meters) return -1;
 
-        setNearbyPlaces({
-          walkable: normalizeNearbyPlaces(businessResults, 5),
-          landmarks: normalizeNearbyPlaces(landmarkResults, 3)
-        });
-      } catch (error) {
-        console.error('Failed to fetch nearby places:', error);
-        setNearbyError('Nearby places could not be loaded.');
-      } finally {
-        setNearbyLoading(false);
-      }
-    };
+          return a.meters - b.meters;
+        })
+        .slice(0, limit);
+    };
 
-    fetchNearbyPlaces();
-  }, [locationCoords, propertyDetails]);
+    try {
+      const {
+        Place,
+        SearchNearbyRankPreference
+      } =
+        await window.google.maps.importLibrary(
+          'places'
+        );
+
+      if (isCancelled) return;
+
+      let businessResults = [];
+      let landmarkResults = [];
+
+      /*
+       * If property has coordinates,
+       * use Places API (New) Nearby Search.
+       */
+      if (
+        locationCoords?.lat &&
+        locationCoords?.lng
+      ) {
+        const center = {
+          lat: Number(locationCoords.lat),
+          lng: Number(locationCoords.lng)
+        };
+
+        const businessResponse =
+          await Place.searchNearby({
+            fields: [
+              'id',
+              'displayName',
+              'location'
+            ],
+
+            locationRestriction: {
+              center,
+              radius: 1500
+            },
+
+            includedTypes: [
+              'restaurant',
+              'cafe',
+              'supermarket',
+              'pharmacy',
+              'store'
+            ],
+
+            maxResultCount: 10,
+
+            rankPreference:
+              SearchNearbyRankPreference.DISTANCE
+          });
+
+        const landmarkResponse =
+          await Place.searchNearby({
+            fields: [
+              'id',
+              'displayName',
+              'location'
+            ],
+
+            locationRestriction: {
+              center,
+              radius: 10000
+            },
+
+            includedTypes: [
+              'tourist_attraction',
+              'shopping_mall',
+              'transit_station',
+              'park',
+              'museum'
+            ],
+
+            maxResultCount: 10,
+
+            rankPreference:
+              SearchNearbyRankPreference.DISTANCE
+          });
+
+        businessResults =
+          businessResponse?.places || [];
+
+        landmarkResults =
+          landmarkResponse?.places || [];
+      }
+
+      /*
+       * Fallback:
+       * If coordinates aren't available,
+       * search using the property address.
+       */
+      else if (addressForNearbySearch) {
+        const businessResponse =
+          await Place.searchByText({
+            textQuery:
+              `restaurants cafes shops supermarkets pharmacies near ${addressForNearbySearch}`,
+
+            fields: [
+              'id',
+              'displayName',
+              'location'
+            ],
+
+            maxResultCount: 10
+          });
+
+        const landmarkResponse =
+          await Place.searchByText({
+            textQuery:
+              `tourist attractions shopping malls transport stations parks museums near ${addressForNearbySearch}`,
+
+            fields: [
+              'id',
+              'displayName',
+              'location'
+            ],
+
+            maxResultCount: 10
+          });
+
+        businessResults =
+          businessResponse?.places || [];
+
+        landmarkResults =
+          landmarkResponse?.places || [];
+      } else {
+        setNearbyError(
+          'Nearby places are not available because the property location cannot be detected.'
+        );
+
+        return;
+      }
+
+      if (isCancelled) return;
+
+      setNearbyPlaces({
+        walkable: normalizeNearbyPlaces(
+          businessResults,
+          5
+        ),
+
+        landmarks: normalizeNearbyPlaces(
+          landmarkResults,
+          3
+        )
+      });
+    } catch (error) {
+      console.error(
+        'Failed to fetch nearby places:',
+        error
+      );
+
+      if (!isCancelled) {
+        setNearbyError(
+          'Nearby places could not be loaded.'
+        );
+      }
+    } finally {
+      if (!isCancelled) {
+        setNearbyLoading(false);
+      }
+    }
+  };
+
+  fetchNearbyPlaces();
+
+  return () => {
+    isCancelled = true;
+  };
+}, [
+  locationCoords?.lat,
+  locationCoords?.lng,
+  propertyDetails?.nearbylocation,
+  propertyDetails?.propertyaddress
+]);
 
   const handlePhotoClick = (index, imagesToUse = null) => { 
       if (imagesToUse && imagesToUse.length > 0) {

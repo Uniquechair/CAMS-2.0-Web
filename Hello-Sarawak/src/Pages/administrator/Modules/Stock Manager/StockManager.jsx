@@ -6,7 +6,8 @@ import {
     fetchBlackoutDates,
     createBlackout,
     overrideBlackout,
-    deleteBlackout
+    deleteBlackout,
+    restockReservation
 } from '../../../../../Api/api';
 import Filter from '../../../../Component/Filter/Filter';
 import Modal from '../../../../Component/Modal/Modal';
@@ -31,6 +32,34 @@ const normalizeMatchText = (value) =>
         .replace(/\s+/g, ' ')
         .trim();
 const pad2 = (value) => String(value).padStart(2, '0');
+
+const isManualRestockReservation = (reservation) => {
+    return (
+        normalizeText(
+            reservation?.ledger_activity_type
+        ) === 'manual restock'
+    );
+};
+
+const getManualRestockRefundAmount = (reservation) => {
+    if (!isManualRestockReservation(reservation)) {
+        return 0;
+    }
+
+    const refundAmount =
+        Number(
+            reservation?.refund_amount || 0
+        );
+
+    if (
+        !Number.isFinite(refundAmount) ||
+        refundAmount < 0
+    ) {
+        return 0;
+    }
+
+    return refundAmount;
+};
 
 const toYmd = (value) => {
     if (!value) return '';
@@ -670,6 +699,410 @@ const DeleteBlackoutModal = ({ isOpen, blackout, onClose, onConfirm, isSubmittin
     );
 };
 
+const RestockModal = ({
+    isOpen,
+    reservation,
+    property,
+    onClose,
+    onConfirm
+}) => {
+    const [step, setStep] = useState(1);
+    const [refundAmount, setRefundAmount] = useState('0.00');
+    const [error, setError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+   useEffect(() => {
+    if (isOpen) {
+        setStep(1);
+        setRefundAmount('0.00');
+        setError('');
+        setIsSubmitting(false);
+    }
+}, [isOpen, reservation?.reservationid]);
+
+    if (!isOpen || !reservation) {
+        return null;
+    }
+
+    const originalAmount =
+        Number(reservation.totalprice || 0);
+
+    const customerName =
+    `${reservation.rcfirstname || ''} ${reservation.rclastname || ''}`
+        .trim() || 'N/A';
+
+const roomInfo =
+    extractRoomAndPackageFromRequest(
+        reservation.request,
+        property || reservation,
+        reservation
+    );
+
+const refundNumber =
+    Number(refundAmount || 0);
+
+    const amountRetained =
+        Math.max(
+            0,
+            originalAmount -
+            (Number.isFinite(refundNumber)
+                ? refundNumber
+                : 0)
+        );
+
+    const handleContinue = () => {
+        const amount = Number(refundAmount);
+
+        if (!Number.isFinite(amount)) {
+            setError(
+                'Please enter a valid refund amount.'
+            );
+            return;
+        }
+
+        if (amount < 0) {
+            setError(
+                'Refund amount cannot be less than RM 0.00.'
+            );
+            return;
+        }
+
+        if (amount > originalAmount) {
+            setError(
+                `Refund amount cannot exceed RM ${originalAmount.toFixed(2)}.`
+            );
+            return;
+        }
+
+        setError('');
+        setStep(2);
+    };
+
+   const handleFinalConfirm = async () => {
+    if (isSubmitting) return;
+
+    try {
+        setIsSubmitting(true);
+
+        await onConfirm({
+            reservationId:
+                reservation.reservationid,
+
+            refundAmount:
+                Number(refundAmount || 0)
+        });
+    } catch (error) {
+        console.error(
+            'Restock confirmation failed:',
+            error
+        );
+
+        setIsSubmitting(false);
+    }
+};
+
+    return (
+        <div className="restock-overlay">
+            <div className="restock-modal">
+
+                <div className="restock-modal-header">
+                    <div>
+                        <h2>Restock Booking</h2>
+
+                        <p>
+                            Reservation #
+                            {reservation.reservationid}
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        className="restock-close-btn"
+                        onClick={onClose}
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                {step === 1 && (
+                    <>
+                        <div className="restock-body">
+
+                            <div className="restock-info-grid">
+
+                                <div className="restock-info-item">
+                                    <span className="restock-label">
+                                        Property
+                                    </span>
+
+                                    <strong>
+                                        {reservation.propertyaddress ||
+                                            'N/A'}
+                                    </strong>
+                                </div>
+
+                                <div className="restock-info-item">
+                                    <span className="restock-label">
+                                        Customer
+                                    </span>
+
+                                    <strong>
+                                        {customerName}
+                                    </strong>
+                                </div>
+
+                                <div className="restock-info-item">
+                                    <span className="restock-label">
+                                        Booking Status
+                                    </span>
+
+                                    <strong className="restock-paid-status">
+                                        {reservation.reservationstatus}
+                                    </strong>
+                                </div>
+
+                                <div className="restock-info-item">
+                                    <span className="restock-label">
+                                        Original Amount Paid
+                                    </span>
+
+                                    <strong>
+                                        RM {originalAmount.toFixed(2)}
+                                    </strong>
+                                </div>
+
+                                <div className="restock-info-item restock-room-info">
+                                <span className="restock-label">
+                                    Room / Package
+                                </span>
+
+                                <strong>
+                                    {roomInfo.roomName || 'Standard'}
+                                </strong>
+
+                                {roomInfo.packageName && (
+                                    <span className="restock-package-badge">
+                                        Package: {roomInfo.packageName}
+                                    </span>
+                                )}
+                            </div>
+
+                            </div>
+
+                            <div className="restock-refund-section">
+
+                                <label>
+                                    Refund Amount (RM)
+                                </label>
+
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max={originalAmount}
+                                    step="0.01"
+                                    value={refundAmount}
+                                    onChange={(e) => {
+                                        setRefundAmount(
+                                            e.target.value
+                                        );
+
+                                        setError('');
+                                    }}
+                                    className="restock-refund-input"
+                                />
+
+                                <small>
+                                    Maximum refundable amount:
+                                    {' '}
+                                    RM {originalAmount.toFixed(2)}
+                                </small>
+
+                                {error && (
+                                    <div className="restock-error">
+                                        {error}
+                                    </div>
+                                )}
+
+                            </div>
+
+                            <div className="restock-calculation">
+
+                                <div>
+                                    <span>
+                                        Original Payment
+                                    </span>
+
+                                    <strong>
+                                        RM {originalAmount.toFixed(2)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>
+                                        Refund
+                                    </span>
+
+                                    <strong className="refund-value">
+                                        - RM {
+                                            Number.isFinite(
+                                                refundNumber
+                                            )
+                                                ? refundNumber.toFixed(2)
+                                                : '0.00'
+                                        }
+                                    </strong>
+                                </div>
+
+                                <div className="restock-retained-row">
+                                    <span>
+                                        Amount Retained
+                                    </span>
+
+                                    <strong>
+                                        RM {amountRetained.toFixed(2)}
+                                    </strong>
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        <div className="restock-footer">
+                            <button
+                                type="button"
+                                className="restock-btn-secondary"
+                                onClick={onClose}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                type="button"
+                                className="restock-btn-primary"
+                                onClick={handleContinue}
+                            >
+                                Continue
+                            </button>
+                        </div>
+                    </>
+                )}
+
+                {step === 2 && (
+                    <>
+                        <div className="restock-body">
+
+                            <div className="restock-confirm-warning">
+                                <strong>
+                                    Confirm Restock?
+                                </strong>
+
+                                <p>
+                                    Please check the details
+                                    carefully before continuing.
+                                </p>
+                            </div>
+
+                            <div className="restock-confirm-summary">
+
+                                <div>
+                                    <span>Reservation</span>
+
+                                    <strong>
+                                        #{reservation.reservationid}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>
+                                        Original Payment
+                                    </span>
+
+                                    <strong>
+                                        RM {originalAmount.toFixed(2)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>
+                                        Refund Amount
+                                    </span>
+
+                                    <strong className="refund-value">
+                                        RM {refundNumber.toFixed(2)}
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>
+                                        Amount Retained
+                                    </span>
+
+                                    <strong>
+                                        RM {amountRetained.toFixed(2)}
+                                    </strong>
+                                </div>
+
+                            </div>
+
+                            <div className="restock-action-warning">
+                                Confirming this action will:
+
+                                <ul>
+                                    <li>
+                                        Cancel the reservation
+                                    </li>
+
+                                    <li>
+                                        Release the booked stock
+                                    </li>
+
+                                    <li>
+                                        Make the room/property
+                                        available for booking again
+                                    </li>
+
+                                    {refundNumber > 0 && (
+                                        <li>
+                                            Record a refund of
+                                            {' '}
+                                            RM {refundNumber.toFixed(2)}
+                                        </li>
+                                    )}
+                                </ul>
+                            </div>
+
+                        </div>
+
+                        <div className="restock-footer">
+
+                            <button
+                                type="button"
+                                className="restock-btn-secondary"
+                                onClick={() => setStep(1)}
+                            >
+                                Go Back
+                            </button>
+
+                            <button
+                            type="button"
+                            className="restock-btn-danger"
+                            onClick={handleFinalConfirm}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting
+                                ? 'Processing...'
+                                : 'Confirm Restock'}
+                        </button>
+
+                        </div>
+                    </>
+                )}
+
+            </div>
+        </div>
+    );
+};
+
 const BlackoutTable = ({ blackouts = [], propertiesById = {}, onOverride, onDelete, isAdmin, currentUserId }) => {
     const [filterRole, setFilterRole] = useState('all');
     const [filterStatus, setFilterStatus] = useState('active');
@@ -825,6 +1258,8 @@ const StockManager = () => {
     const userGroup = localStorage.getItem('userGroup') || localStorage.getItem('usergroup') || '';
     const currentUserId = localStorage.getItem('userid') || localStorage.getItem('userId') || '';
     const isAdmin = userGroup.toLowerCase() === 'admin' || userGroup.toLowerCase() === 'administrator';
+    const currentUsername =
+    localStorage.getItem('username') || '';
 
     const [searchKey, setSearchKey] = useState('');
     const [selectedStatus, setSelectedStatus] = useState('All');
@@ -838,6 +1273,25 @@ const StockManager = () => {
 
     const [selectedReservation, setSelectedReservation] = useState(null);
     const [calendarHighlight, setCalendarHighlight] = useState(null);
+    const [openActionMenuId, setOpenActionMenuId] = useState(null);
+    useEffect(() => {
+    const handleOutsideActionClick = () => {
+        setOpenActionMenuId(null);
+    };
+
+    document.addEventListener(
+        'click',
+        handleOutsideActionClick
+    );
+
+    return () => {
+        document.removeEventListener(
+            'click',
+            handleOutsideActionClick
+        );
+    };
+}, []);
+    const [selectedRestockReservation, setSelectedRestockReservation] = useState(null);
 
     const [summaryFilterType, setSummaryFilterType] = useState('month');
     const [summaryMonth, setSummaryMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -1108,6 +1562,48 @@ const [stockRoleFilter, setStockRoleFilter] = useState('all');
         return status === 'expired' || status === 'cancelled';
     };
 
+const canRestockReservation = (reservation) => {
+    const status =
+        getReservationStatusKey(reservation);
+
+    // Only fully paid bookings can use manual Restock.
+    if (status !== 'paid') {
+        return false;
+    }
+
+    // Check-in must not already be in the past.
+    const checkInDate =
+        toYmd(
+            reservation.checkindatetime
+        );
+
+    if (!checkInDate) {
+        return false;
+    }
+
+    // Same-day cancellation/restock is allowed.
+    // Past check-in is not allowed.
+    if (checkInDate < todayYmd) {
+        return false;
+    }
+
+    // Administrator can restock any eligible Paid booking.
+    if (isAdmin) {
+        return true;
+    }
+
+    // Property creator can only restock their own property.
+    const propertyOwner =
+        reservation.property_owner_username ||
+        reservation.username ||
+        '';
+
+    return (
+        normalizeText(propertyOwner) ===
+        normalizeText(currentUsername)
+    );
+};
+
     const getReservationCommissionAmount = (reservation) => {
         const directCommission = parseFloat(
             reservation?.commissionamount ??
@@ -1130,37 +1626,102 @@ const [stockRoleFilter, setStockRoleFilter] = useState('all');
     };
 
     const summaryReservations = useMemo(() => {
-        if (!Array.isArray(reservationsData)) return [];
+    if (!Array.isArray(reservationsData)) {
+        return [];
+    }
 
-        return reservationsData.filter((reservation) => {
-            const status = getReservationStatusKey(reservation);
+    return reservationsData.filter(
+        (reservation) => {
+            const status =
+                getReservationStatusKey(
+                    reservation
+                );
+
+            const isManualRestockCancelled =
+                status === 'cancelled' &&
+                isManualRestockReservation(
+                    reservation
+                );
 
             return (
-                isWithinSummaryRange(reservation) &&
-                (status === 'paid' || status === 'partially paid')
+                isWithinSummaryRange(
+                    reservation
+                ) &&
+                (
+                    status === 'paid' ||
+                    status === 'partially paid' ||
+                    isManualRestockCancelled
+                )
             );
-        });
-    }, [
-        reservationsData,
-        summaryFilterType,
-        summaryMonth,
-        summaryStartDate,
-        summaryEndDate,
-    ]);
+        }
+    );
+}, [
+    reservationsData,
+    summaryFilterType,
+    summaryMonth,
+    summaryStartDate,
+    summaryEndDate,
+]);
 
-    const totalRevenue = useMemo(() => {
-        return summaryReservations.reduce(
-            (sum, reservation) => sum + (parseFloat(reservation.totalprice) || 0),
-            0
-        );
-    }, [summaryReservations]);
+   const totalRevenue = useMemo(() => {
+    return summaryReservations.reduce(
+        (sum, reservation) => {
+            const totalPrice =
+                parseFloat(
+                    reservation.totalprice
+                ) || 0;
 
-    const totalCommission = useMemo(() => {
-        return summaryReservations.reduce(
-            (sum, reservation) => sum + getReservationCommissionAmount(reservation),
-            0
-        );
-    }, [summaryReservations]);
+            const status =
+                getReservationStatusKey(
+                    reservation
+                );
+
+            if (
+                status === 'cancelled' &&
+                isManualRestockReservation(
+                    reservation
+                )
+            ) {
+                const refundAmount =
+                    Math.min(
+                        totalPrice,
+                        getManualRestockRefundAmount(
+                            reservation
+                        )
+                    );
+
+                const retainedAmount =
+                    Math.max(
+                        0,
+                        totalPrice -
+                        refundAmount
+                    );
+
+                return (
+                    sum +
+                    retainedAmount
+                );
+            }
+
+            return (
+                sum +
+                totalPrice
+            );
+        },
+        0
+    );
+}, [summaryReservations]);
+
+   const totalCommission = useMemo(() => {
+    return summaryReservations.reduce(
+        (sum, reservation) =>
+            sum +
+            getReservationCommissionAmount(
+                reservation
+            ),
+        0
+    );
+}, [summaryReservations]);
 
     const filteredReservations = useMemo(() => {
         if (!Array.isArray(reservationsData)) return [];
@@ -1282,6 +1843,65 @@ console.log("DEBUG extractPropertyImage result:", extractPropertyImage(reservati
             block: 'start',
         });
     };
+
+    const handleRestockClick = (reservation) => {
+    setOpenActionMenuId(null);
+    setSelectedRestockReservation(reservation);
+};
+
+
+const handleRestockConfirm = async ({
+    reservationId,
+    refundAmount
+}) => {
+    try {
+        const result =
+            await restockReservation(
+                reservationId,
+                refundAmount
+            );
+
+        console.log(
+            'RESTOCK SUCCESS:',
+            result
+        );
+
+        // Close the popup
+        setSelectedRestockReservation(null);
+
+        // Close the three-dot menu
+        setOpenActionMenuId(null);
+
+        // Refresh reservation data
+        await queryClient.invalidateQueries({
+            queryKey: ['reservations']
+        });
+
+        await refetchReservations();
+
+        // Show success toast
+        setBlackoutSuccess(
+            `Reservation #${reservationId} restocked successfully!`
+        );
+
+        setTimeout(() => {
+            setBlackoutSuccess('');
+        }, 3500);
+
+    } catch (error) {
+        console.error(
+            'RESTOCK FAILED:',
+            error
+        );
+
+        alert(
+            error.message ||
+            'Failed to restock reservation.'
+        );
+
+        throw error;
+    }
+};
 
     const handleJumpToTable = (reservation) => {
         const sortedReservations = [...filteredReservations].sort((a, b) => {
@@ -1453,10 +2073,50 @@ console.log("DEBUG extractPropertyImage result:", extractPropertyImage(reservati
             render: (reservation) => formatDateDisplay(reservation.checkoutdatetime),
         },
         {
-            header: 'Revenue',
-            accessor: 'totalprice',
-            render: (reservation) => `RM ${reservation.totalprice ?? '0.00'}`,
-        },
+    header: 'Revenue',
+    accessor: 'totalprice',
+
+    render: (reservation) => {
+        const totalPrice =
+            Number(
+                reservation.totalprice || 0
+            );
+
+        const status =
+            getReservationStatusKey(
+                reservation
+            );
+
+        if (
+            status === 'cancelled' &&
+            isManualRestockReservation(
+                reservation
+            )
+        ) {
+            const refundAmount =
+                Math.min(
+                    totalPrice,
+                    getManualRestockRefundAmount(
+                        reservation
+                    )
+                );
+
+            const retainedAmount =
+                Math.max(
+                    0,
+                    totalPrice - refundAmount
+                );
+
+            return formatCurrency(
+                retainedAmount
+            );
+        }
+
+        return formatCurrency(
+            totalPrice
+        );
+    },
+},
         {
             header: 'Commission',
             accessor: 'commission',
@@ -1468,51 +2128,100 @@ console.log("DEBUG extractPropertyImage result:", extractPropertyImage(reservati
             render: (reservation) => <Status value={reservation.reservationstatus} />,
         },
         {
-            header: 'Actions',
-            accessor: 'actions',
-            render: (reservation) => (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleRowClick(reservation);
-                        }}
-                        style={{
-                            padding: '7px 12px',
-                            backgroundColor: '#8dc63f',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: '700',
-                            whiteSpace: 'nowrap'
-                        }}
-                    >
-                        View Details
-                    </button>
+    header: 'Actions',
+    accessor: 'actions',
 
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleJumpToCalendar(reservation);
-                        }}
-                        style={{
-                            padding: '7px 12px',
-                            backgroundColor: '#2196F3',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: '700',
-                            whiteSpace: 'nowrap'
-                        }}
-                    >
-                        Jump to Calendar
-                    </button>
-                </div>
-            ),
-        },
-    ], [propertiesById]);
+    render: (reservation) => {
+        const menuOpen =
+            openActionMenuId === reservation.reservationid;
+
+        const canRestock =
+            canRestockReservation(reservation);
+
+        return (
+            <div
+                className="stock-action-wrapper"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <button
+                    type="button"
+                    className="stock-action-menu-btn"
+                    onClick={(e) => {
+                        e.stopPropagation();
+
+                        setOpenActionMenuId((prev) =>
+                            prev === reservation.reservationid
+                                ? null
+                                : reservation.reservationid
+                        );
+                    }}
+                    title="Actions"
+                >
+                    ⋯
+                </button>
+
+                {menuOpen && (
+                    <div className="stock-action-dropdown">
+
+                        <button
+                            type="button"
+                            className="stock-action-item"
+                            onClick={(e) => {
+                                e.stopPropagation();
+
+                                setOpenActionMenuId(null);
+
+                                handleRowClick(reservation);
+                            }}
+                        >
+                            View Details
+                        </button>
+
+                        <button
+                            type="button"
+                            className="stock-action-item stock-action-calendar"
+                            onClick={(e) => {
+                                e.stopPropagation();
+
+                                setOpenActionMenuId(null);
+
+                                handleJumpToCalendar(
+                                    reservation
+                                );
+                            }}
+                        >
+                            Jump to Calendar
+                        </button>
+
+                        {canRestock && (
+                            <button
+                                type="button"
+                                className="stock-action-item stock-action-restock"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+
+                                    handleRestockClick(
+                                        reservation
+                                    );
+                                }}
+                            >
+                                Restock
+                            </button>
+                        )}
+
+                    </div>
+                )}
+            </div>
+        );
+    },
+},
+   ], [
+    propertiesById,
+    openActionMenuId,
+    currentUsername,
+    isAdmin,
+    todayYmd
+]);
 
     const activePropertiesForStock = useMemo(() => {
         return propertiesList.filter((p) => p.propertystatus === 'Available');
@@ -1820,7 +2529,7 @@ const clearRosterDates = () => {
     }, []);
 
     return (
-        <div>
+    <div className="stock-manager-page">
             {blackoutSuccess && (
                 <div className="blackout-toast">{blackoutSuccess}</div>
             )}
@@ -2566,6 +3275,35 @@ const clearRosterDates = () => {
                 data={selectedReservation || {}}
                 labels={displayLabels}
                 onClose={() => setSelectedReservation(null)}
+            />
+
+            <RestockModal
+                isOpen={
+                    !!selectedRestockReservation
+                }
+
+                reservation={
+                    selectedRestockReservation
+                }
+
+                property={
+                    selectedRestockReservation
+                        ? (
+                            propertiesById[
+                                selectedRestockReservation.propertyid
+                            ] ||
+                            selectedRestockReservation
+                        )
+                        : null
+                }
+
+                onClose={() =>
+                    setSelectedRestockReservation(null)
+                }
+
+                onConfirm={
+                    handleRestockConfirm
+                }
             />
 
             <BlackoutModal

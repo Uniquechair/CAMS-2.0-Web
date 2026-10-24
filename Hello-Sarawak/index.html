@@ -19,12 +19,13 @@
   <body>
     <div id="root"></div>
 
-    <script type="module" src="/src/main.jsx"></script>
-
+    <!-- Google Maps + Places -->
     <script
-      async
       defer
-      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDKYk7S1LM5HQF9LeYJ-dp3LBGvmTdQBNw&libraries=places"
+      src="https://maps.googleapis.com/maps/api/js?key=%VITE_GOOGLE_MAPS_API_KEY%&libraries=places"
     ></script>
+
+    <!-- React/Vite -->
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

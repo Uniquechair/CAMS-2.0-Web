@@ -33,12 +33,21 @@ const Reservations = () => {
     };
 
     const normalizeStatus = (status = '') => {
-        return String(status || '')
-            .trim()
-            .toLowerCase()
-            .replace(/[_-]+/g, ' ')
-            .replace(/\s+/g, ' ');
-    };
+    const normalized = String(status || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ');
+
+    if (
+        normalized === 'cancelled' ||
+        normalized === 'canceled'
+    ) {
+        return 'canceled';
+    }
+
+    return normalized;
+};
 
     const normalizeReservations = (data) => {
         if (Array.isArray(data)) return data;
@@ -106,11 +115,12 @@ const Reservations = () => {
     };
 
     const {
-        data: reservations = [],
-        isLoading,
-        isError,
-        error,
-    } = useQuery({
+    data: reservations = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+} = useQuery({
         // Use different query key from Stock Manager to avoid cache conflict.
         queryKey: ['reservations-page-list'],
         queryFn: async () => {
@@ -137,19 +147,33 @@ const Reservations = () => {
                 throw new Error(`Failed to fetch reservations: ${fetchError.message}`);
             }
         },
-        staleTime: 10 * 60 * 1000,
-        cacheTime: 15 * 60 * 1000,
-        refetchOnWindowFocus: false,
-        refetchOnMount: false,
-        retry: 1,
+        staleTime: 0,
+
+// Always fetch latest reservation data
+// whenever this page is opened.
+refetchOnMount: 'always',
+
+// Refresh if Admin / Moderator returns
+// to this browser tab.
+refetchOnWindowFocus: true,
+
+refetchOnReconnect: true,
+
+retry: 1,
         onError: (queryError) => {
             displayToast('error', queryError.message || 'Failed to load reservations');
         },
     });
 
-    const handleApplyFilters = () => {
-        setAppliedFilters({ status: selectedStatus });
-    };
+   const handleApplyFilters = () => {
+    setAppliedFilters({
+        status: selectedStatus
+    });
+
+    // Get latest reservation status
+    // before displaying the filter result.
+    refetch();
+};
 
     const filters = useMemo(() => [
         {
@@ -182,21 +206,39 @@ const Reservations = () => {
         images: 'Images',
     };
 
-    const filteredReservations = useMemo(() => {
-        const list = Array.isArray(reservations) ? reservations : [];
-        const keyword = searchKey.trim().toLowerCase();
-        const selectedStatusKey = normalizeStatus(appliedFilters.status);
+   const filteredReservations = useMemo(() => {
+    const list = Array.isArray(reservations)
+        ? reservations
+        : [];
 
-        return list.filter((reservation) => {
-            const reservationStatus = normalizeStatus(reservation.reservationstatus || 'Pending');
+    const keyword =
+        searchKey.trim().toLowerCase();
+
+    const selectedStatusKey =
+        normalizeStatus(
+            appliedFilters.status
+        );
+
+    return list
+        .filter((reservation) => {
+            const reservationStatus =
+                normalizeStatus(
+                    reservation.reservationstatus ||
+                    'Pending'
+                );
 
             const statusMatch =
                 selectedStatusKey === 'all' ||
-                reservationStatus === selectedStatusKey;
+                reservationStatus ===
+                    selectedStatusKey;
 
-            if (!statusMatch) return false;
+            if (!statusMatch) {
+                return false;
+            }
 
-            if (!keyword) return true;
+            if (!keyword) {
+                return true;
+            }
 
             const searchableText = [
                 reservation.reservationid,
@@ -204,8 +246,12 @@ const Reservations = () => {
                 reservation.totalprice,
                 reservation.request,
                 reservation.reservationstatus,
-                formatDate(reservation.checkindatetime),
-                formatDate(reservation.checkoutdatetime),
+                formatDate(
+                    reservation.checkindatetime
+                ),
+                formatDate(
+                    reservation.checkoutdatetime
+                ),
                 reservation.rcfirstname,
                 reservation.rclastname,
                 reservation.rcemail,
@@ -216,9 +262,31 @@ const Reservations = () => {
                 .join(' ')
                 .toLowerCase();
 
-            return searchableText.includes(keyword);
+            return searchableText.includes(
+                keyword
+            );
+        })
+
+        // Newest reservation first
+        .sort((a, b) => {
+            const idA =
+                Number(
+                    a.reservationid || 0
+                );
+
+            const idB =
+                Number(
+                    b.reservationid || 0
+                );
+
+            return idB - idA;
         });
-    }, [reservations, appliedFilters.status, searchKey]);
+
+}, [
+    reservations,
+    appliedFilters.status,
+    searchKey
+]);
 
     const handleAction = (action, reservation) => {
         if (normalizeStatus(reservation.reservationstatus) === 'expired') {
@@ -365,11 +433,15 @@ const Reservations = () => {
 
             {!isLoading && !isError && (
                 <PaginatedTable
-                    data={filteredReservations}
-                    columns={columns}
-                    rowKey="reservationid"
-                    enableCheckbox={false}
-                />
+    key={
+        filteredReservations[0]
+            ?.reservationid || 0
+    }
+    data={filteredReservations}
+    columns={columns}
+    rowKey="reservationid"
+    enableCheckbox={false}
+/>
             )}
 
             <Modal

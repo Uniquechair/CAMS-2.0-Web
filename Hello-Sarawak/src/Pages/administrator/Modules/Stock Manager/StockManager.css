@@ -1691,3 +1691,619 @@
   line-height: 1.6;
   max-width: 780px;
 }
+
+
+
+
+/* ================================
+   STOCK MANAGER ACTION MENU
+================================ */
+
+/*
+   PaginatedTable.css uses overflow:hidden on table cells.
+   Allow ONLY the Stock Manager Actions cell to display
+   the dropdown outside of the table cell.
+*/
+.stock-manager-page .paginated-table .styled-table {
+  overflow: visible;
+}
+
+.stock-manager-page .paginated-table .styled-table td:last-child {
+  overflow: visible !important;
+  position: relative;
+}
+
+.stock-manager-page .paginated-table .styled-table th:last-child {
+  min-width: 90px;
+  text-align: center;
+}
+
+/* Actions wrapper */
+.stock-action-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+/* Three-dot button */
+.stock-action-menu-btn {
+  width: 42px;
+  height: 38px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid #dbe4f0;
+  border-radius: 10px;
+
+  background: #ffffff;
+  color: #475569;
+
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1;
+
+  cursor: pointer;
+
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.stock-action-menu-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.1);
+
+  transform: translateY(-1px);
+}
+
+.stock-action-menu-btn:focus {
+  outline: none;
+
+  border-color: #3b82f6;
+
+  box-shadow:
+    0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+/* Dropdown */
+.stock-action-dropdown {
+  position: absolute;
+
+  top: calc(100% + 8px);
+  right: 0;
+
+  width: 205px;
+  min-width: 205px;
+
+  background: #ffffff;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+
+  box-shadow:
+    0 12px 30px rgba(15, 23, 42, 0.15);
+
+  overflow: hidden;
+
+ z-index: 9999;
+
+  animation: stockActionMenuOpen 0.15s ease-out;
+}
+
+@keyframes stockActionMenuOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Normal menu item */
+.stock-action-item {
+  width: 100%;
+
+  display: flex;
+  align-items: center;
+
+  padding: 12px 15px;
+
+  border: none;
+  background: #ffffff;
+
+  color: #334155;
+
+  font-size: 13px;
+  font-weight: 600;
+
+  text-align: left;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.stock-action-item + .stock-action-item {
+  border-top: 1px solid #f1f5f9;
+}
+
+.stock-action-item:hover {
+  background: #f8fafc;
+}
+
+/* Calendar */
+.stock-action-calendar {
+  color: #2563eb;
+}
+
+.stock-action-calendar:hover {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+/* Restock */
+.stock-action-restock {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.stock-action-restock:hover {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+/* ================================
+   RESTOCK / REFUND MODAL
+================================ */
+
+.restock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 16px;
+
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.restock-modal {
+  width: min(100%, 620px);
+
+  max-height: calc(100dvh - 32px);
+
+  display: flex;
+  flex-direction: column;
+
+  background: #ffffff;
+  border-radius: 18px;
+
+  overflow: hidden;
+
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.25);
+
+  box-sizing: border-box;
+}
+
+.restock-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+
+  padding: 22px 24px;
+
+  border-bottom: 1px solid #e2e8f0;
+
+  flex-shrink: 0;
+  background: #ffffff;
+}
+.restock-modal-header h2 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.restock-modal-header p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.restock-close-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.restock-close-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.restock-body {
+  padding: 22px 24px;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  min-height: 0;
+
+  flex: 1;
+}
+
+.restock-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.restock-info-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.restock-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.restock-info-item strong {
+  color: #1e293b;
+  font-size: 14px;
+}
+
+.restock-paid-status {
+  color: #16a34a !important;
+}
+
+.restock-refund-section {
+  margin-top: 20px;
+}
+
+.restock-refund-section label {
+  display: block;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.restock-refund-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.restock-refund-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.restock-refund-section small {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.restock-error {
+  margin-top: 10px;
+  padding: 9px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.restock-calculation {
+  margin-top: 20px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.restock-calculation > div,
+.restock-confirm-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.restock-retained-row {
+  margin-top: 5px;
+  padding-top: 12px !important;
+  border-top: 1px solid #cbd5e1;
+  color: #1e293b !important;
+}
+
+.refund-value {
+  color: #dc2626 !important;
+}
+
+.restock-confirm-warning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  padding: 14px;
+  color: #9a3412;
+}
+
+.restock-confirm-warning p {
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+
+.restock-confirm-summary {
+  margin-top: 16px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.restock-action-warning {
+  margin-top: 16px;
+  padding: 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #7f1d1d;
+  font-size: 13px;
+}
+
+.restock-action-warning ul {
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
+.restock-action-warning li {
+  margin: 5px 0;
+}
+
+.restock-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+
+  gap: 10px;
+
+  padding: 16px 24px;
+
+  border-top: 1px solid #e2e8f0;
+
+  background: #ffffff;
+
+  flex-shrink: 0;
+}
+
+.restock-btn-secondary,
+.restock-btn-primary,
+.restock-btn-danger {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.restock-btn-secondary {
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.restock-btn-primary {
+  background: #2563eb;
+  color: white;
+  border: none;
+}
+
+.restock-btn-danger {
+  background: #dc2626;
+  color: white;
+  border: none;
+}
+
+.restock-btn-secondary:hover {
+  background: #f8fafc;
+}
+
+.restock-btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.restock-btn-danger:hover {
+  background: #b91c1c;
+}
+
+/* RESTOCK ROOM / PACKAGE */
+
+.restock-room-info {
+    grid-column: 1 / -1;
+}
+
+.restock-package-badge {
+    display: inline-block;
+    width: fit-content;
+
+    margin-top: 6px;
+    padding: 5px 9px;
+
+    border-radius: 999px;
+
+    background: #eff6ff;
+    color: #1d4ed8;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    white-space: normal;
+    word-break: break-word;
+}
+
+@media (max-width: 600px) {
+
+  .restock-overlay {
+    padding: 10px;
+    align-items: center;
+  }
+
+  .restock-modal {
+    width: 100%;
+    max-width: 100%;
+
+    max-height: calc(100dvh - 20px);
+
+    border-radius: 14px;
+  }
+
+  .restock-modal-header {
+    padding: 16px 18px;
+  }
+
+  .restock-modal-header h2 {
+    font-size: 19px;
+  }
+
+  .restock-modal-header p {
+    font-size: 12px;
+  }
+
+  .restock-close-btn {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+  }
+
+  .restock-body {
+    padding: 16px 18px;
+  }
+
+  .restock-info-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .restock-info-item {
+    padding: 11px;
+  }
+
+  .restock-room-info {
+    grid-column: auto;
+  }
+
+  .restock-refund-section {
+    margin-top: 14px;
+  }
+
+  .restock-calculation {
+    margin-top: 14px;
+  }
+
+  .restock-footer {
+    padding: 12px 18px;
+
+    flex-direction: row;
+  }
+
+  .restock-btn-secondary,
+  .restock-btn-primary,
+  .restock-btn-danger {
+    flex: 1;
+    width: auto;
+
+    padding: 10px 12px;
+  }
+}
+
+@media (max-height: 700px) {
+
+  .restock-overlay {
+    padding: 8px;
+  }
+
+  .restock-modal {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .restock-modal-header {
+    padding: 14px 18px;
+  }
+
+  .restock-body {
+    padding: 14px 18px;
+  }
+
+  .restock-info-grid {
+    gap: 8px;
+  }
+
+  .restock-info-item {
+    padding: 10px;
+  }
+
+  .restock-refund-section {
+    margin-top: 12px;
+  }
+
+  .restock-calculation {
+    margin-top: 12px;
+  }
+
+  .restock-footer {
+    padding: 10px 18px;
+  }
+}
+
+
+

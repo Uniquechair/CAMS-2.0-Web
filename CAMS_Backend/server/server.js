@@ -29,7 +29,7 @@ const upload = multer({
 const sql = require('mssql');
 const cors = require('cors');
 const { OAuth2Client } = require("google-auth-library");
-const client = new OAuth2Client("673433660299-lvc4flptijogcqipvlp6c5teu89ecift.apps.googleusercontent.com");
+const client = new OAuth2Client("1098095757409-qq8kk80vqijn2ajp56soj7nanc3q5snq.apps.googleusercontent.com");
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
@@ -302,6 +302,54 @@ const pool = new Pool({
     rejectUnauthorized: false   // encrypts but skips strict check
   }
 });
+
+// =======================================================
+// AUDIT TRAIL TIMEZONE
+// Always record actual Malaysia time for new audit records.
+// =======================================================
+
+const setupAuditTrailTimestamp = async () => {
+  const client = await pool.connect();
+
+  try {
+    await client.query(`
+      CREATE OR REPLACE FUNCTION
+      set_audit_trail_action_time()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.timestamp :=
+          clock_timestamp()
+          AT TIME ZONE
+          'Asia/Kuala_Lumpur';
+
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+
+    await client.query(`
+      DROP TRIGGER IF EXISTS
+      trg_set_audit_trail_action_time
+      ON audit_trail;
+    `);
+
+    await client.query(`
+      CREATE TRIGGER
+      trg_set_audit_trail_action_time
+      BEFORE INSERT
+      ON audit_trail
+      FOR EACH ROW
+      EXECUTE FUNCTION
+      set_audit_trail_action_time();
+    `);
+
+    console.log(
+      'Audit Trail Malaysia timestamp trigger ready.'
+    );
+  } finally {
+    client.release();
+  }
+};
 
 const app = express();
 let productCache = {
@@ -4725,6 +4773,21 @@ app.get('/users/booklog', async (req, res) => {
     return res.status(400).json({ message: "Missing userid parameter" });
   }
 
+    res.set(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate'
+  );
+
+  res.set(
+    'Pragma',
+    'no-cache'
+  );
+
+  res.set(
+    'Expires',
+    '0'
+  );
+
   let client;
 
   try {
@@ -5933,10 +5996,33 @@ app.get('/reservationTable', async (req, res) => {
                 ) AS commissionamount,
 
                 COALESCE(
-                    bl.moderator_earning,
-                    ROUND((COALESCE(r.totalprice, 0) - (COALESCE(r.totalprice, 0) * COALESCE(lc.commission_rate, 0)))::numeric, 2),
-                    0
-                ) AS moderator_earning
+    bl.moderator_earning,
+    ROUND(
+        (
+            COALESCE(r.totalprice, 0)
+            -
+            (
+                COALESCE(r.totalprice, 0)
+                *
+                COALESCE(lc.commission_rate, 0)
+            )
+        )::numeric,
+        2
+    ),
+    0
+) AS moderator_earning,
+
+bl.remarks AS payment_remarks,
+
+COALESCE(
+    bl.debit,
+    0
+) AS refund_amount,
+
+COALESCE(
+    bl.activity_type,
+    ''
+) AS ledger_activity_type
 
             FROM reservation r
             JOIN properties p ON r.propertyid = p.propertyid
@@ -5945,10 +6031,13 @@ app.get('/reservationTable', async (req, res) => {
             CROSS JOIN latest_commission lc
 
             LEFT JOIN LATERAL (
-                SELECT 
-                    booking_ledger.commission_rate,
-                    booking_ledger.commission_amount,
-                    booking_ledger.moderator_earning
+    SELECT 
+        booking_ledger.commission_rate,
+        booking_ledger.commission_amount,
+        booking_ledger.moderator_earning,
+        booking_ledger.remarks,
+        booking_ledger.debit,
+        booking_ledger.activity_type
                 FROM booking_ledger
                 WHERE booking_ledger.reservationid = r.reservationid
                 ORDER BY booking_ledger.ledgerid DESC
@@ -6214,6 +6303,54 @@ app.patch('/updateReservationStatus/:reservationid', async (req, res) => {
         console.error('Sold out email skipped:', soldOutEmailError.message);
       }
     }
+
+    // Ensure balance payment also updates
+// the existing Ledger row to Paid.
+if (statusLower === 'paid') {
+  try {
+    const ledgerPaidResult =
+      await client.query(
+        `
+        UPDATE booking_ledger
+        SET
+          activity_type = 'Payment Successful',
+          booking_status = 'Paid',
+          stock_status = 'Deducted',
+
+          credit = COALESCE(
+            moderator_earning,
+            credit,
+            0
+          ),
+
+          debit = 0,
+
+          expected_amount = COALESCE(
+            gross_amount,
+            expected_amount,
+            0
+          ),
+
+          timestamp =
+            NOW() AT TIME ZONE
+            'Asia/Kuala_Lumpur'
+
+        WHERE reservationid = $1
+        `,
+        [reservationid]
+      );
+
+    console.log(
+      `Paid ledger sync reservation #${reservationid}:`,
+      ledgerPaidResult.rowCount
+    );
+  } catch (ledgerPaidError) {
+    console.error(
+      'Paid ledger sync failed:',
+      ledgerPaidError.message
+    );
+  }
+}
 
 // This prevents the old deposit ledger from being changed into Paid after balance payment.
 if (['expired', 'cancelled', 'canceled'].includes(statusLower)) {
@@ -6596,15 +6733,23 @@ const cancelledRoomPackageLine =
 await client.query(
   `
   INSERT INTO audit_trail (
-    entityid, 
-    timestamp, 
-    entitytype, 
-    actiontype, 
-    action, 
-    userid, 
+    entityid,
+    timestamp,
+    entitytype,
+    actiontype,
+    action,
+    userid,
     username
   )
-  VALUES ($1, NOW(), $2, $3, $4, $5, $6)
+  VALUES (
+    $1,
+    NOW() AT TIME ZONE 'Asia/Kuala_Lumpur',
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+  )
   `,
   [
     reservationid,
@@ -6647,6 +6792,658 @@ await client.query(
     }
   }
 });
+
+
+// MANUAL RESTOCK FOR PAID RESERVATIONS
+// Administrator: any eligible property
+// Property creator: own property only
+
+app.patch(
+  '/restockReservation/:reservationid',
+  async (req, res) => {
+    const { reservationid } = req.params;
+    const timestamp =
+  new Date(Date.now() + 8 * 60 * 60 * 1000);
+
+    const refundAmount =
+      Number(req.body?.refundAmount ?? 0);
+
+    const requesterId =
+      Number(req.user?.userid);
+
+    const requesterUsername =
+      String(
+        req.user?.username ||
+        'Unknown User'
+      ).trim();
+
+    const requesterGroup =
+      String(
+        req.user?.usergroup || ''
+      )
+        .trim()
+        .toLowerCase();
+
+    let client;
+
+  
+
+    if (
+      !reservationid ||
+      !Number.isInteger(
+        Number(reservationid)
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Invalid reservation ID.'
+      });
+    }
+
+    if (
+      !Number.isFinite(refundAmount) ||
+      refundAmount < 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Refund amount must be RM 0.00 or greater.'
+      });
+    }
+
+    if (!requesterId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          'User authentication is required.'
+      });
+    }
+
+    try {
+      client = await pool.connect();
+
+      await client.query('BEGIN');
+
+   
+
+      const reservationResult =
+        await client.query(
+          `
+          SELECT
+            r.reservationid,
+            r.propertyid,
+            r.userid AS customer_userid,
+            r.checkindatetime,
+            r.checkoutdatetime,
+            r.totalprice,
+            r.downpaymentamount,
+            r.request,
+            r.reservationstatus,
+
+            p.propertyaddress,
+            p.userid AS property_owner_userid,
+
+            rc.rcfirstname,
+            rc.rclastname,
+            rc.rcemail,
+
+            bl.ledgerid,
+            bl.remarks AS ledger_remarks,
+            bl.commission_rate,
+            bl.commission_amount,
+            bl.moderator_earning,
+            bl.credit AS ledger_credit,
+
+            (
+              r.checkindatetime::date
+              <
+              (
+                NOW()
+                AT TIME ZONE
+                'Asia/Kuching'
+              )::date
+            ) AS checkin_passed
+
+          FROM reservation r
+
+          JOIN properties p
+            ON p.propertyid =
+               r.propertyid
+
+          LEFT JOIN
+            reservation_customer_details rc
+            ON rc.rcid = r.rcid
+
+          LEFT JOIN LATERAL (
+            SELECT
+            ledgerid,
+            remarks,
+            commission_rate,
+            commission_amount,
+            moderator_earning,
+            credit
+
+            FROM booking_ledger
+
+            WHERE reservationid =
+                  r.reservationid
+
+            ORDER BY ledgerid DESC
+
+            LIMIT 1
+          ) bl ON true
+
+          WHERE r.reservationid = $1
+
+          FOR UPDATE OF r
+          `,
+          [reservationid]
+        );
+
+      if (
+        reservationResult.rows.length === 0
+      ) {
+        await client.query('ROLLBACK');
+
+        return res.status(404).json({
+          success: false,
+          message:
+            'Reservation not found.'
+        });
+      }
+
+      const reservation =
+        reservationResult.rows[0];
+
+      
+      // Must still be Paid.
+     
+
+      const currentStatus =
+        String(
+          reservation.reservationstatus ||
+          ''
+        )
+          .trim()
+          .toLowerCase();
+
+      if (currentStatus !== 'paid') {
+        await client.query('ROLLBACK');
+
+        return res.status(409).json({
+          success: false,
+          message:
+            'Only Paid reservations can be manually restocked.'
+        });
+      }
+
+
+      
+      // Past check-in cannot restock.
+      // Same-day is allowed.
+    
+
+      if (reservation.checkin_passed) {
+        await client.query('ROLLBACK');
+
+        return res.status(409).json({
+          success: false,
+          message:
+            'This booking can no longer be restocked because the check-in date has already passed.'
+        });
+      }
+
+      
+      // Permission.
+      // Administrator = all.
+      // Property creator = own property.
+     
+
+      const isAdministrator =
+        requesterGroup ===
+          'administrator' ||
+        requesterGroup === 'admin';
+
+      const isPropertyCreator =
+        Number(
+          reservation.property_owner_userid
+        ) === requesterId;
+
+      if (
+        !isAdministrator &&
+        !isPropertyCreator
+      ) {
+        await client.query('ROLLBACK');
+
+        return res.status(403).json({
+          success: false,
+          message:
+            'You are not allowed to restock this property booking.'
+        });
+      }
+
+      
+      // Refund validation.
+      // Instant Pay = totalprice paid.
+      
+
+      const originalAmount =
+        Number(
+          reservation.totalprice || 0
+        );
+
+      if (
+        refundAmount >
+        originalAmount
+      ) {
+        await client.query('ROLLBACK');
+
+        return res.status(400).json({
+          success: false,
+          message:
+            `Refund cannot exceed RM ${originalAmount.toFixed(
+              2
+            )}.`
+        });
+      }
+
+      const retainedAmount =
+        Math.max(
+          0,
+          originalAmount -
+          refundAmount
+        );
+
+        const originalOperatorEarning =
+  reservation.moderator_earning != null
+    ? Number(reservation.moderator_earning)
+    : Number(reservation.ledger_credit || 0);
+
+const adjustedOperatorEarning =
+  Math.max(
+    0,
+    originalOperatorEarning -
+    refundAmount
+  );
+
+      // 1. Cancel reservation.
+      // Stock automatically becomes available because Cancelled does not hold stock.
+     
+
+      const updatedResult =
+        await client.query(
+          `
+          UPDATE reservation
+
+          SET reservationstatus =
+              'Cancelled'
+
+          WHERE reservationid = $1
+
+          RETURNING *
+          `,
+          [reservationid]
+        );
+
+      const updatedReservation =
+        updatedResult.rows[0];
+
+      
+      // Get room / package name.
+    
+
+      const roomPackage =
+        formatRoomPackageForLog(
+          reservation.request
+        );
+
+      // 2. Update CURRENT ledger row.
+   
+
+      if (!reservation.ledgerid) {
+        await client.query('ROLLBACK');
+
+        return res.status(409).json({
+          success: false,
+          message:
+            'Payment ledger record was not found for this reservation.'
+        });
+      }
+
+      await client.query(
+        `
+        UPDATE booking_ledger
+
+        SET
+  activity_type = 'Manual Restock',
+
+  stock_status = 'Restocked',
+
+  booking_status = 'Cancelled',
+
+  moderator_earning = $1,
+
+  credit = $1,
+
+  debit = $2,
+
+  expected_amount = $3,
+
+  remarks = $4,
+
+  timestamp = $5
+
+WHERE reservationid = $6
+        `,
+      [
+  adjustedOperatorEarning,
+
+  refundAmount,
+
+  retainedAmount,
+
+  `Manual restock. Original payment: RM ${originalAmount.toFixed(
+    2
+  )}. Refund: RM ${refundAmount.toFixed(
+    2
+  )}. Amount retained: RM ${retainedAmount.toFixed(
+    2
+  )}.`,
+
+  timestamp,
+
+  reservationid
+]
+      );
+
+    
+      // 3. Book & Pay Log
+    
+
+      await client.query(
+  `
+  INSERT INTO
+    book_and_pay_log (
+      logtime,
+      log,
+      userid
+    )
+
+  VALUES (
+    $1,
+    $2,
+    $3
+  )
+  `,
+  [
+    timestamp,
+
+    `${requesterUsername} restocked reservation #${reservationid} (${reservation.propertyaddress}). Room/Package: ${roomPackage}. Stock Restocked. Original Payment: RM ${originalAmount.toFixed(
+      2
+    )} | Refund: RM ${refundAmount.toFixed(
+      2
+    )} | Amount Retained: RM ${retainedAmount.toFixed(
+      2
+    )}. Booking status changed to Cancelled.`,
+
+    requesterId
+  ]
+);
+
+    
+      // 4. Simple Audit Trail.
+     
+
+     await client.query(
+  `
+  INSERT INTO audit_trail (
+    entityid,
+    timestamp,
+    entitytype,
+    actiontype,
+    action,
+    userid,
+    username
+  )
+
+  VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+  )
+  `,
+  [
+    reservationid,
+    timestamp,
+    'Reservation',
+    'PATCH',
+    'Restock Reservation',
+    requesterId,
+    requesterUsername
+  ]
+);
+
+      
+     // 5. Existing booking alert.
+try {
+  await createBookingAlertNotification(
+    client,
+    reservationid,
+    'Cancelled'
+  );
+} catch (notificationError) {
+  console.error(
+    'Restock notification skipped:',
+    notificationError.message
+  );
+}
+
+
+// Commit the Manual Restock first.
+await client.query('COMMIT');
+
+
+// =======================================================
+// MANUAL RESTOCK REFUND EMAIL TO CUSTOMER
+// =======================================================
+
+if (
+  reservation.rcemail &&
+  refundAmount > 0
+) {
+  try {
+    const customerName =
+      `${reservation.rcfirstname || ''} ${reservation.rclastname || ''}`
+        .trim() ||
+      'Customer';
+
+    const emailRoomPackage =
+      roomPackage &&
+      roomPackage !== 'N/A'
+        ? roomPackage
+        : 'Whole Property / Homestay';
+
+    await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      {
+        sender: {
+          name:
+            process.env.BREVO_SENDER_NAME ||
+            'CAMS System',
+
+          email:
+            process.env.BREVO_SENDER_EMAIL,
+        },
+
+        to: [
+          {
+            email: reservation.rcemail,
+            name: customerName,
+          },
+        ],
+
+        subject:
+          'Booking Cancelled and Refund Update',
+
+        htmlContent: `
+          <h2 style="margin: 0 0 16px; color: #111827;">
+            Booking Cancelled and Refund Update
+          </h2>
+
+          <p style="font-size: 15px; color: #374151;">
+            Dear ${customerName},
+          </p>
+
+          <p style="font-size: 15px; color: #374151;">
+            Your booking has been cancelled and the refund has been recorded.
+          </p>
+
+          <div
+            style="
+              background-color: #f8fafc;
+              border: 1px solid #e2e8f0;
+              padding: 16px 18px;
+              border-radius: 8px;
+              margin: 18px 0;
+            "
+          >
+            <p style="margin: 0 0 8px;">
+              <b>Property:</b>
+              ${reservation.propertyaddress || 'N/A'}
+            </p>
+
+            <p style="margin: 0 0 8px;">
+              <b>Room / Package:</b>
+              ${emailRoomPackage}
+            </p>
+
+            <p style="margin: 0 0 8px;">
+              <b>Refund Amount:</b>
+              RM ${refundAmount.toFixed(2)}
+            </p>
+
+            <p style="margin: 0;">
+              <b>Booking Status:</b>
+              Cancelled
+            </p>
+          </div>
+
+          <p style="font-size: 15px; color: #374151;">
+  The refund amount above has been recorded for this booking.
+  Please contact the property owner if you need further information
+  regarding the refund arrangement.
+</p>
+
+          <p style="font-size: 15px; color: #374151;">
+            Thank you,<br/>
+            <b>SarawakAdventures</b>
+          </p>
+        `,
+      },
+      {
+        headers: {
+          'api-key':
+            process.env.BREVO_API_KEY,
+
+          'Content-Type':
+            'application/json',
+        },
+      }
+    );
+
+    console.log(
+      `Manual Restock refund email sent to ${reservation.rcemail}`
+    );
+
+  } catch (emailError) {
+    console.error(
+      'Manual Restock refund email failed:',
+      emailError.response?.data ||
+      emailError.message
+    );
+  }
+}
+
+
+// Clear any cached availability.
+clearProductCache();
+
+
+
+      // Existing waitlist function.
+      if (
+        typeof notifyWaitlistedUsers ===
+        'function'
+      ) {
+        notifyWaitlistedUsers(
+          reservation.propertyid,
+          reservation.checkindatetime,
+          reservation.checkoutdatetime
+        ).catch((error) => {
+          console.error(
+            'Restock waitlist notification skipped:',
+            error.message
+          );
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          'Reservation restocked successfully.',
+
+        reservation:
+          updatedReservation,
+
+        refundAmount:
+          Number(
+            refundAmount.toFixed(2)
+          ),
+
+        originalAmount:
+          Number(
+            originalAmount.toFixed(2)
+          ),
+
+        retainedAmount:
+          Number(
+            retainedAmount.toFixed(2)
+          )
+      });
+
+    } catch (error) {
+      if (client) {
+        await client.query(
+          'ROLLBACK'
+        );
+      }
+
+      console.error(
+        'Manual Restock error:',
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          'Failed to restock reservation.',
+        details:
+          error.message
+      });
+
+    } finally {
+      if (client) {
+        client.release();
+      }
+    }
+  }
+);
+
 
 // Remove reservation
 app.delete('/removeReservation/:reservationid', async (req, res) => {
@@ -6713,6 +7510,9 @@ app.delete('/removeReservation/:reservationid', async (req, res) => {
     }
 
     await client.query('COMMIT'); // Lock in all deletions
+
+
+
 
     // RESTOCK TRIGGER (Waitlist Notification)
     if (typeof notifyWaitlistedUsers === 'function') {
@@ -8038,9 +8838,21 @@ if (
   result = await client.query(
     `
     SELECT 
-      audittrailid, entityid, timestamp, entitytype, actiontype, action, userid, username
-    FROM audit_trail
-    ORDER BY timestamp DESC
+  audittrailid,
+  entityid,
+
+  TO_CHAR(
+    timestamp,
+    'YYYY-MM-DD HH24:MI:SS'
+  ) AS timestamp,
+
+  entitytype,
+  actiontype,
+  action,
+  userid,
+  username
+FROM audit_trail
+ORDER BY audit_trail.timestamp DESC
     `
   );
 } else {
@@ -8058,7 +8870,10 @@ if (
       result = await client.query(
         `
         SELECT 
-          a.audittrailid, a.entityid, a.timestamp, a.entitytype, a.actiontype, a.action, a.userid, a.username
+          a.audittrailid, a.entityid, TO_CHAR(
+  a.timestamp,
+  'YYYY-MM-DD HH24:MI:SS'
+) AS timestamp, a.entitytype, a.actiontype, a.action, a.userid, a.username
         FROM audit_trail a 
         JOIN users u
         ON a.userid = u.userid
@@ -8069,20 +8884,12 @@ if (
       );
     }
 
-    // Format timestamps to yyyy-mm-dd hh:mm:ss
-    const formattedRows = result.rows.map(row => {
-      if (row.timestamp) {
-        const date = new Date(row.timestamp);
-        row.timestamp = date.toISOString().replace('T', ' ').split('.')[0]; 
-      }
-      return row;
-    });
+  
 
     // Never throw a 404 error if table is empty. Return empty array instead.
-    res.status(200).json({
-      auditTrails: formattedRows || [],
-    });
-    
+   res.status(200).json({
+  auditTrails: result.rows || [],
+});
   } catch (err) {
     console.error("Error fetching audit trail data:", err);
     res.status(500).json({ message: "Internal Server Error", details: err.message });
@@ -8769,26 +9576,39 @@ try {
     }
 
     try {
-      await client.query(
-        `
-        INSERT INTO audit_trail (
-          entityid, timestamp, entitytype, actiontype, action, userid, username
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `,
-        [
-          reservationid,
-          timestamp,
-          'Reservation',
-          'POST',
-          isDepositPayment
-            ? 'Payment Deposit'
-            : isBalancePayment
-              ? 'Payment Balance'
-              : 'Make Payment',
-          creatorid || null,
-          creatorUsername || 'Customer',
-        ]
-      );
+     await client.query(
+  `
+  INSERT INTO audit_trail (
+    entityid,
+    timestamp,
+    entitytype,
+    actiontype,
+    action,
+    userid,
+    username
+  ) VALUES (
+    $1,
+    NOW() AT TIME ZONE 'Asia/Kuala_Lumpur',
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+  )
+  `,
+  [
+    reservationid,
+    'Reservation',
+    'POST',
+    isDepositPayment
+      ? 'Payment Deposit'
+      : isBalancePayment
+        ? 'Payment Balance'
+        : 'Make Payment',
+    creatorid || null,
+    creatorUsername || 'Customer',
+  ]
+);
     } catch (auditError) {
       console.error('Payment audit skipped:', auditError.message);
     }
@@ -8822,9 +9642,13 @@ try {
       ? Math.max(0, gross - depositAmountForLog)
       : modEarning;
 
-    const ledgerExpected = isDepositPayment
-      ? Math.max(0, gross - depositAmountForLog)
-      : 0;
+    const ledgerExpected =
+  isDepositPayment
+    ? Math.max(
+        0,
+        gross - depositAmountForLog
+      )
+    : gross;
 
     const ledgerRemarks = isDepositPayment
       ? 'Customer paid deposit fee'
@@ -8915,7 +9739,7 @@ app.post('/check-date-overlap/:propertyId', async (req, res) => {
     const resQuery = `
       SELECT r.reservationid FROM reservation r
       WHERE r.propertyid = $1 AND DATE(r.checkindatetime) <= $2 AND DATE(r.checkoutdatetime) >= $2
-        AND r.reservationstatus NOT IN ('canceled', 'Canceled', 'Rejected')
+        AND LOWER(TRIM(r.reservationstatus)) IN ('paid', 'partially paid')
       LIMIT 1
     `;
     const resResult = await client.query(resQuery, [propertyId, checkIn]);
@@ -9066,12 +9890,30 @@ app.get('/property-availability', async (req, res) => {
       values.push(`%Room Selected: ${roomNameValue}%`);
     }
 
-    const bookingResult = await client.query(bookingQuery, values);
+const bookingResult = await client.query(bookingQuery, values);
 
-    return res.status(200).json({
-      bookedCount: bookingResult.rows.length,
-      bookings: bookingResult.rows
-    });
+// DEBUG
+console.log('BACKEND PROPERTY AVAILABILITY:', {
+  propertyid,
+  checkIn,
+  checkOut,
+  roomName: roomNameValue,
+  packageName: packageNameValue,
+  queryValues: values,
+  bookedCount: bookingResult.rows.length,
+  bookings: bookingResult.rows.map((row) => ({
+    reservationid: row.reservationid,
+    reservationstatus: row.reservationstatus,
+    request: row.request,
+    checkindatetime: row.checkindatetime,
+    checkoutdatetime: row.checkoutdatetime
+  }))
+});
+
+return res.status(200).json({
+  bookedCount: bookingResult.rows.length,
+  bookings: bookingResult.rows
+});
 
   } catch (err) {
     console.error('Error checking property availability:', err);
@@ -9116,16 +9958,13 @@ app.get('/property-sold-out-dates', async (req, res) => {
   };
 
   const shouldHoldStock = (reservation) => {
-    const status = normalizeStatus(reservation.reservationstatus);
+  const status = normalizeStatus(reservation.reservationstatus);
 
-    return [
-      'paid',
-      'partially paid',
-      'payment pending',
-      'pending',
-      'booking'
-    ].includes(status);
-  };
+  return [
+    'paid',
+    'partially paid'
+  ].includes(status);
+};
 
   const toIsoDate = (value) => {
     const date = value instanceof Date ? value : new Date(value);
@@ -11132,16 +11971,38 @@ const {
     `;
 
     if (search) {
-      conditions.push(`(
-        bl.propertyname ILIKE $${index}
-        OR bl.customer_name ILIKE $${index}
-        OR COALESCE(u.username, bl.moderator_username, '') ILIKE $${index}
-        OR bl.activity_type ILIKE $${index}
-        OR ${roomTypeExpr} ILIKE $${index}
-      )`);
-      values.push(`%${search}%`);
-      index++;
-    }
+  conditions.push(`(
+    CAST(
+      COALESCE(
+        r.reservationid,
+        bl.reservationid
+      ) AS TEXT
+    ) ILIKE $${index}
+
+    OR (
+      '#' ||
+      CAST(
+        COALESCE(
+          r.reservationid,
+          bl.reservationid
+        ) AS TEXT
+      )
+    ) ILIKE $${index}
+
+    OR bl.propertyname ILIKE $${index}
+    OR bl.customer_name ILIKE $${index}
+    OR COALESCE(
+      u.username,
+      bl.moderator_username,
+      ''
+    ) ILIKE $${index}
+    OR bl.activity_type ILIKE $${index}
+    OR ${roomTypeExpr} ILIKE $${index}
+  )`);
+
+  values.push(`%${search}%`);
+  index++;
+}
 
     if (status) {
       const normalizedStatus = String(status).toLowerCase().trim();
@@ -11243,42 +12104,125 @@ if (normalizedSortOrder === 'reservation_oldest') {
         bl.commission_amount,
         bl.moderator_earning,
 
-        CASE
-          WHEN ${statusExpr} = 'paid'
-          THEN COALESCE(bl.moderator_earning, bl.credit, 0)
+       CASE
+  WHEN ${statusExpr} = 'paid'
+  THEN COALESCE(
+    bl.moderator_earning,
+    bl.credit,
+    0
+  )
 
-          WHEN ${statusExpr} = 'partially paid'
-          THEN GREATEST(
-            COALESCE(r.totalprice, bl.gross_amount, 0)
-            - COALESCE(r.downpaymentamount, bl.debit, 0),
-            0
-          )
+  WHEN ${statusExpr} = 'partially paid'
+  THEN GREATEST(
+    COALESCE(
+      r.totalprice,
+      bl.gross_amount,
+      0
+    )
+    -
+    COALESCE(
+      r.downpaymentamount,
+      bl.debit,
+      0
+    ),
+    0
+  )
 
-          ELSE 0
-        END AS credit,
+  WHEN ${statusExpr} = 'cancelled'
+    AND LOWER(
+      TRIM(
+        COALESCE(
+          bl.activity_type,
+          ''
+        )
+      )
+    ) = 'manual restock'
+  THEN COALESCE(
+    bl.credit,
+    0
+  )
 
-        CASE
-          WHEN ${statusExpr} = 'partially paid'
-          THEN COALESCE(r.downpaymentamount, bl.debit, 0)
+  ELSE 0
+END AS credit,
 
-          ELSE 0
-        END AS debit,
+       CASE
+  WHEN ${statusExpr} = 'partially paid'
+  THEN COALESCE(
+    r.downpaymentamount,
+    bl.debit,
+    0
+  )
 
-        CASE
-          WHEN ${statusExpr} = 'paid'
-          THEN COALESCE(r.totalprice, bl.gross_amount, 0)
+  WHEN ${statusExpr} = 'cancelled'
+    AND LOWER(
+      TRIM(
+        COALESCE(
+          bl.activity_type,
+          ''
+        )
+      )
+    ) = 'manual restock'
+  THEN COALESCE(
+    bl.debit,
+    0
+  )
 
-          WHEN ${statusExpr} = 'partially paid'
-          THEN COALESCE(r.totalprice, bl.gross_amount, 0)
+  ELSE 0
+END AS debit,
 
-          WHEN ${statusExpr} IN ('expired', 'cancelled')
-          THEN COALESCE(r.totalprice, bl.gross_amount, bl.expected_amount, 0)
+       CASE
+  WHEN ${statusExpr} = 'paid'
+  THEN COALESCE(
+    r.totalprice,
+    bl.gross_amount,
+    0
+  )
 
-          WHEN ${statusExpr} IN ('accepted', 'payment pending')
-          THEN COALESCE(r.totalprice, bl.gross_amount, bl.expected_amount, 0)
+  WHEN ${statusExpr} = 'partially paid'
+  THEN COALESCE(
+    r.totalprice,
+    bl.gross_amount,
+    0
+  )
 
-          ELSE 0
-        END AS expected_amount,
+  WHEN ${statusExpr} = 'cancelled'
+    AND LOWER(
+      TRIM(
+        COALESCE(
+          bl.activity_type,
+          ''
+        )
+      )
+    ) = 'manual restock'
+  THEN COALESCE(
+    bl.expected_amount,
+    0
+  )
+
+  WHEN ${statusExpr} IN (
+    'expired',
+    'cancelled'
+  )
+  THEN COALESCE(
+    r.totalprice,
+    bl.gross_amount,
+    bl.expected_amount,
+    0
+  )
+
+  WHEN ${statusExpr} IN (
+    'accepted',
+    'payment pending'
+  )
+  THEN COALESCE(
+    r.totalprice,
+    bl.gross_amount,
+    bl.expected_amount,
+    0
+  )
+
+  ELSE 0
+END AS expected_amount,
 
         bl.remarks,
 bl.timestamp,
@@ -11433,12 +12377,34 @@ const statusExpr = `
 
 if (search) {
   conditions.push(`(
-    bl.propertyname ILIKE $${index}
+    CAST(
+      COALESCE(
+        r.reservationid,
+        bl.reservationid
+      ) AS TEXT
+    ) ILIKE $${index}
+
+    OR (
+      '#' ||
+      CAST(
+        COALESCE(
+          r.reservationid,
+          bl.reservationid
+        ) AS TEXT
+      )
+    ) ILIKE $${index}
+
+    OR bl.propertyname ILIKE $${index}
     OR bl.customer_name ILIKE $${index}
-    OR COALESCE(u.username, bl.moderator_username, '') ILIKE $${index}
+    OR COALESCE(
+      u.username,
+      bl.moderator_username,
+      ''
+    ) ILIKE $${index}
     OR bl.activity_type ILIKE $${index}
     OR ${roomTypeExpr} ILIKE $${index}
   )`);
+
   values.push(`%${search}%`);
   index++;
 }
@@ -11470,47 +12436,130 @@ if (status) {
     const query = `
       SELECT
         COALESCE(SUM(
-          CASE
-            WHEN ${statusExpr} = 'paid'
-            THEN COALESCE(bl.moderator_earning, bl.credit, 0)
+  CASE
+    WHEN ${statusExpr} = 'paid'
+    THEN COALESCE(
+      bl.moderator_earning,
+      bl.credit,
+      0
+    )
 
-            WHEN ${statusExpr} = 'partially paid'
-            THEN GREATEST(
-              COALESCE(r.totalprice, bl.gross_amount, 0)
-              - COALESCE(r.downpaymentamount, bl.debit, 0),
-              0
-            )
+    WHEN ${statusExpr} = 'partially paid'
+    THEN GREATEST(
+      COALESCE(
+        r.totalprice,
+        bl.gross_amount,
+        0
+      )
+      -
+      COALESCE(
+        r.downpaymentamount,
+        bl.debit,
+        0
+      ),
+      0
+    )
 
-            ELSE 0
-          END
-        ), 0) AS total_credit,
+    WHEN ${statusExpr} = 'cancelled'
+      AND LOWER(
+        TRIM(
+          COALESCE(
+            bl.activity_type,
+            ''
+          )
+        )
+      ) = 'manual restock'
+    THEN COALESCE(
+      bl.credit,
+      0
+    )
+
+    ELSE 0
+  END
+), 0) AS total_credit,
+
+       COALESCE(SUM(
+  CASE
+    WHEN ${statusExpr} = 'partially paid'
+    THEN COALESCE(
+      r.downpaymentamount,
+      bl.debit,
+      0
+    )
+
+    WHEN ${statusExpr} = 'cancelled'
+      AND LOWER(
+        TRIM(
+          COALESCE(
+            bl.activity_type,
+            ''
+          )
+        )
+      ) = 'manual restock'
+    THEN COALESCE(
+      bl.debit,
+      0
+    )
+
+    ELSE 0
+  END
+), 0) AS total_debit,
 
         COALESCE(SUM(
-          CASE
-            WHEN ${statusExpr} = 'partially paid'
-            THEN COALESCE(r.downpaymentamount, bl.debit, 0)
+  CASE
+    WHEN ${statusExpr} = 'paid'
+    THEN COALESCE(
+      r.totalprice,
+      bl.gross_amount,
+      0
+    )
 
-            ELSE 0
-          END
-        ), 0) AS total_debit,
+    WHEN ${statusExpr} = 'partially paid'
+    THEN COALESCE(
+      r.totalprice,
+      bl.gross_amount,
+      0
+    )
 
-        COALESCE(SUM(
-          CASE
-            WHEN ${statusExpr} = 'paid'
-            THEN COALESCE(r.totalprice, bl.gross_amount, 0)
+    WHEN ${statusExpr} = 'cancelled'
+      AND LOWER(
+        TRIM(
+          COALESCE(
+            bl.activity_type,
+            ''
+          )
+        )
+      ) = 'manual restock'
+    THEN COALESCE(
+      bl.expected_amount,
+      0
+    )
 
-            WHEN ${statusExpr} = 'partially paid'
-            THEN COALESCE(r.totalprice, bl.gross_amount, 0)
+    WHEN ${statusExpr} IN (
+      'expired',
+      'cancelled'
+    )
+    THEN COALESCE(
+      r.totalprice,
+      bl.gross_amount,
+      bl.expected_amount,
+      0
+    )
 
-            WHEN ${statusExpr} IN ('expired', 'cancelled')
-            THEN COALESCE(r.totalprice, bl.gross_amount, bl.expected_amount, 0)
+    WHEN ${statusExpr} IN (
+      'accepted',
+      'payment pending'
+    )
+    THEN COALESCE(
+      r.totalprice,
+      bl.gross_amount,
+      bl.expected_amount,
+      0
+    )
 
-            WHEN ${statusExpr} IN ('accepted', 'payment pending')
-            THEN COALESCE(r.totalprice, bl.gross_amount, bl.expected_amount, 0)
-
-            ELSE 0
-          END
-        ), 0) AS total_expected,
+    ELSE 0
+  END
+), 0) AS total_expected,
 
         COALESCE(SUM(bl.commission_amount), 0) AS total_commission,
         COUNT(*) AS total_transactions
@@ -12710,10 +13759,30 @@ app.get('/finance/ledger-card', async (req, res) => {
           COALESCE(totalprice, gross_amount, 0) AS booking_total,
 
           CASE
-            WHEN normalized_status = 'paid'
-              THEN COALESCE(moderator_earning, credit, 0)
-            ELSE 0
-          END AS paid_operator_earning,
+  WHEN normalized_status = 'paid'
+  THEN COALESCE(
+    moderator_earning,
+    credit,
+    0
+  )
+
+  WHEN normalized_status = 'cancelled'
+    AND LOWER(
+      TRIM(
+        COALESCE(
+          activity_type,
+          ''
+        )
+      )
+    ) = 'manual restock'
+  THEN COALESCE(
+    credit,
+    moderator_earning,
+    0
+  )
+
+  ELSE 0
+END AS paid_operator_earning,
 
           CASE
             WHEN normalized_status = 'partially paid'
@@ -12731,16 +13800,71 @@ app.get('/finance/ledger-card', async (req, res) => {
           END AS balance_remaining,
 
           CASE
-            WHEN normalized_status IN ('paid', 'partially paid')
-              THEN COALESCE(commission_amount, 0)
-            ELSE 0
-          END AS commission_value,
+  WHEN normalized_status IN (
+    'paid',
+    'partially paid'
+  )
+  THEN COALESCE(
+    commission_amount,
+    0
+  )
+
+  WHEN normalized_status = 'cancelled'
+    AND LOWER(
+      TRIM(
+        COALESCE(
+          activity_type,
+          ''
+        )
+      )
+    ) = 'manual restock'
+  THEN COALESCE(
+    commission_amount,
+    0
+  )
+
+  ELSE 0
+END AS commission_value,
 
           CASE
-            WHEN normalized_status IN ('paid', 'partially paid', 'accepted', 'payment pending')
-              THEN COALESCE(totalprice, gross_amount, expected_amount, 0)
-            ELSE 0
-          END AS active_revenue
+  WHEN normalized_status IN (
+    'paid',
+    'partially paid',
+    'accepted',
+    'payment pending'
+  )
+  THEN COALESCE(
+    totalprice,
+    gross_amount,
+    expected_amount,
+    0
+  )
+
+WHEN normalized_status = 'cancelled'
+  AND LOWER(
+    TRIM(
+      COALESCE(
+        activity_type,
+        ''
+      )
+    )
+  ) = 'manual restock'
+THEN GREATEST(
+  COALESCE(
+    totalprice,
+    gross_amount,
+    0
+  )
+  -
+  COALESCE(
+    debit,
+    0
+  ),
+  0
+)
+
+  ELSE 0
+END AS active_revenue
 
         FROM base_scope
       ),
@@ -13135,10 +14259,28 @@ app.post('/mfa/disable', async (req, res) => {
   }
 });
 
-// Start the server
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+// Start the server only after
+// Audit Trail timezone protection is ready.
+const startServer = async () => {
+  try {
+    await setupAuditTrailTimestamp();
+
+    app.listen(port, () => {
+      console.log(
+        `Server running on http://localhost:${port}`
+      );
+    });
+  } catch (error) {
+    console.error(
+      'Failed to prepare Audit Trail timestamp:',
+      error
+    );
+
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // Schedule a daily job to send payment reminders at 9:00 AM Malaysia/Sarawak time
 cron.schedule(

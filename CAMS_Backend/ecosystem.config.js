@@ -12,7 +12,7 @@ module.exports = {
 
       env_production: {
         NODE_ENV: 'production',
-        DATABASE_URL: 'postgresql://doadmin:AVNS_TP13M3HO1XcHlVr7H_j@camsdb-do-user-31745824-0.g.db.ondigitalocean.com:25060/defaultdb',
+        DATABASE_URL: 'postgresql://postgres:WisonSurewin@127.0.0.1:5432/cams',
       },
     },
   ],
